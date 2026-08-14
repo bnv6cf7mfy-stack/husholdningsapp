@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Husholdningsapp icon">
+  <rect width="512" height="512" rx="96" fill="#0f766e"/>
+  <circle cx="192" cy="236" r="76" fill="#f7f7f2"/>
+  <circle cx="320" cy="236" r="76" fill="#d1fae5"/>
+  <rect x="146" y="324" width="220" height="46" rx="23" fill="#f7f7f2"/>
+</svg>
