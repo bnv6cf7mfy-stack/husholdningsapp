@@ -1,15 +1,30 @@
-import { FeaturePlaceholderPage } from "@/features/navigation/components/feature-placeholder-page";
+import { redirect } from "next/navigation";
+import { CalendarPlanner } from "@/features/calendar/components/calendar-planner";
+import { getCalendarData } from "@/features/calendar/queries";
 
-export default function CalendarPage() {
+type CalendarPageProps = {
+  searchParams?: Promise<{
+    month?: string;
+  }>;
+};
+
+export default async function CalendarPage({ searchParams }: CalendarPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const data = await getCalendarData(resolvedSearchParams?.month);
+
+  if (!data) {
+    redirect("/onboarding");
+  }
+
   return (
-    <FeaturePlaceholderPage
-      title="Kalender"
-      description="Her kommer kalenderen for familiens avtaler og aktiviteter."
-      nextSteps={[
-        "Opprette avtaler med start/slutt og type.",
-        "Knytte hendelser til ett eller flere barn.",
-        "Vise neste avtale på dashboard."
-      ]}
+    <CalendarPlanner
+      householdName={data.householdName}
+      month={data.month}
+      currentUserName={data.currentUserName}
+      children={data.children}
+      initialEvents={data.events}
+      members={data.members}
+      initialChildcareAssignments={data.childcareAssignments}
     />
   );
 }
