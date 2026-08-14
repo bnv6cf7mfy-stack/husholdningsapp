@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export type CurrentMembership = {
   householdId: string;
@@ -6,37 +7,60 @@ export type CurrentMembership = {
   householdName: string;
 };
 
-export async function getCurrentProfileId() {
+async function resolveAuthUserId(authUserId?: string) {
+  if (authUserId) {
+    return authUserId;
+  }
+
   const supabase = await createServerSupabaseClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
 
-  if (!user) {
+  return user?.id ?? null;
+}
+
+export async function getCurrentProfileId(authUserId?: string) {
+  const resolvedAuthUserId = await resolveAuthUserId(authUserId);
+
+  if (!resolvedAuthUserId) {
     return null;
   }
 
-  const { data: profile } = await supabase
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: profile } = await adminSupabase
     .from("profiles")
     .select("id")
-    .eq("auth_user_id", user.id)
+    .eq("auth_user_id", resolvedAuthUserId)
     .maybeSingle();
 
   return profile?.id ?? null;
 }
 
-export async function getCurrentMembership(): Promise<CurrentMembership | null> {
-  const supabase = await createServerSupabaseClient();
-  const profileId = await getCurrentProfileId();
+export async function getCurrentMembership(authUserId?: string): Promise<CurrentMembership | null> {
+  const resolvedAuthUserId = await resolveAuthUserId(authUserId);
 
-  if (!profileId) {
+  if (!resolvedAuthUserId) {
     return null;
   }
 
-  const { data } = await supabase
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: profile } = await adminSupabase
+    .from("profiles")
+    .select("id")
+    .eq("auth_user_id", resolvedAuthUserId)
+    .maybeSingle();
+
+  if (!profile) {
+    return null;
+  }
+
+  const { data } = await adminSupabase
     .from("household_members")
-    .select("household_id, role, households(name)")
-    .eq("user_id", profileId)
+    .select("household_id, role")
+    .eq("user_id", profile.id)
     .order("joined_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -45,11 +69,15 @@ export async function getCurrentMembership(): Promise<CurrentMembership | null> 
     return null;
   }
 
-  const householdName = (data.households as { name?: string } | null)?.name ?? "Husholdning";
+  const { data: household } = await adminSupabase
+    .from("households")
+    .select("name")
+    .eq("id", data.household_id)
+    .maybeSingle();
 
   return {
     householdId: data.household_id,
     role: data.role,
-    householdName
+    householdName: household?.name ?? "Husholdning"
   };
 }

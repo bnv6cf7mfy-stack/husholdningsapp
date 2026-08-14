@@ -1,7 +1,9 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { redirect } from "next/navigation";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type HouseholdFormState = {
@@ -14,19 +16,9 @@ const householdSchema = z.object({
 
 const defaultShoppingCategories = [
   "Frukt og grønt",
-  "Brød og bakervarer",
-  "Pålegg",
-  "Kjøtt og fisk",
-  "Meieri og egg",
-  "Middag / tørrvarer",
-  "Hermetikk / sauser / krydder",
-  "Snacks",
-  "Drikke",
-  "Frys",
-  "Barn",
-  "Husholdning",
-  "Hygiene",
-  "Annet"
+  "Kjøtt, fisk og pålegg",
+  "Melkeprodukter",
+  "Andre dagligvarer"
 ];
 
 const deriveDisplayName = (email?: string) => {
@@ -87,7 +79,9 @@ export async function createHouseholdAction(
     profileId = createdProfile.id;
   }
 
-  const { data: membership } = await supabase
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: membership } = await adminSupabase
     .from("household_members")
     .select("household_id")
     .eq("user_id", profileId)
@@ -98,21 +92,20 @@ export async function createHouseholdAction(
     redirect("/dashboard");
   }
 
-  const { data: household, error: householdError } = await supabase
-    .from("households")
-    .insert({
-      name: parsed.data.householdName,
-      created_by: profileId
-    })
-    .select("id")
-    .single();
+  const householdId = randomUUID();
 
-  if (householdError || !household) {
+  const { error: householdError } = await supabase.from("households").insert({
+    id: householdId,
+    name: parsed.data.householdName,
+    created_by: profileId
+  });
+
+  if (householdError) {
     return { error: "Kunne ikke opprette household." };
   }
 
-  const { error: memberError } = await supabase.from("household_members").insert({
-    household_id: household.id,
+  const { error: memberError } = await adminSupabase.from("household_members").insert({
+    household_id: householdId,
     user_id: profileId,
     role: "owner"
   });
@@ -122,13 +115,13 @@ export async function createHouseholdAction(
   }
 
   const categoryRows = defaultShoppingCategories.map((name, index) => ({
-    household_id: household.id,
+    household_id: householdId,
     name,
     sort_order: index + 1,
     active: true
   }));
 
-  await supabase.from("shopping_categories").insert(categoryRows);
+  await adminSupabase.from("shopping_categories").insert(categoryRows);
 
   redirect("/dashboard");
 }

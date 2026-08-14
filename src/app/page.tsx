@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getCurrentMembership, getCurrentProfileId } from "@/features/household/queries";
 
 export default async function HomePage() {
   const supabase = await createServerSupabaseClient();
@@ -9,22 +10,13 @@ export default async function HomePage() {
   } = await supabase.auth.getUser();
 
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("auth_user_id", user.id)
-      .maybeSingle();
+    const profileId = await getCurrentProfileId(user.id);
 
-    if (!profile) {
+    if (!profileId) {
       redirect("/onboarding");
     }
 
-    const { data: membership } = await supabase
-      .from("household_members")
-      .select("household_id")
-      .eq("user_id", profile.id)
-      .limit(1)
-      .maybeSingle();
+    const membership = await getCurrentMembership(user.id);
 
     redirect(membership ? "/dashboard" : "/onboarding");
   }
