@@ -253,6 +253,7 @@ const saveCalendarDayDetailsSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   dropoffProfileId: z.string().uuid().optional().or(z.literal("")),
   pickupProfileId: z.string().uuid().optional().or(z.literal("")),
+  dinnerRecipeId: z.string().uuid().optional().or(z.literal("")),
   dinnerTitle: z.string().trim().max(160).optional(),
   dinnerNote: z.string().trim().max(800).optional()
 });
@@ -315,6 +316,7 @@ export async function saveCalendarDayDetailsAction(formData: FormData) {
     date: formData.get("date"),
     dropoffProfileId: formData.get("dropoffProfileId") || "",
     pickupProfileId: formData.get("pickupProfileId") || "",
+    dinnerRecipeId: formData.get("dinnerRecipeId") || "",
     dinnerTitle: formData.get("dinnerTitle") || undefined,
     dinnerNote: formData.get("dinnerNote") || undefined
   });
@@ -396,12 +398,28 @@ export async function saveCalendarDayDetailsAction(formData: FormData) {
 
   const dinnerTitle = parsed.data.dinnerTitle?.trim() ?? "";
   const dinnerNote = parsed.data.dinnerNote?.trim() ?? "";
+  const dinnerRecipeIdRaw = parsed.data.dinnerRecipeId?.trim() ?? "";
 
-  if (dinnerTitle || dinnerNote) {
+  let dinnerRecipeId: string | null = null;
+
+  if (dinnerRecipeIdRaw) {
+    const { data: recipeRow } = await adminSupabase
+      .from("recipes")
+      .select("id")
+      .eq("id", dinnerRecipeIdRaw)
+      .eq("household_id", context.householdId)
+      .is("archived_at", null)
+      .maybeSingle();
+
+    dinnerRecipeId = recipeRow?.id ?? null;
+  }
+
+  if (dinnerTitle || dinnerNote || dinnerRecipeId) {
     await adminSupabase.from("meal_plans").insert({
       household_id: context.householdId,
       meal_date: parsed.data.date,
       meal_type: "dinner",
+      recipe_id: dinnerRecipeId,
       custom_title: dinnerTitle || null,
       note: dinnerNote || null,
       created_by: context.profileId

@@ -8,6 +8,7 @@ import type {
   ChildcareAssignment,
   DailyMealPlan,
   HouseholdMember,
+  RecipeOption,
   TodayPartnerMessage,
   TomorrowWeather
 } from "@/features/calendar/types";
@@ -23,6 +24,7 @@ export type CalendarData = {
   members: HouseholdMember[];
   childcareAssignments: ChildcareAssignment[];
   dailyMealPlans: DailyMealPlan[];
+  recipes: RecipeOption[];
   todayMessage: TodayPartnerMessage | null;
   tomorrowWeather: TomorrowWeather;
 };
@@ -217,27 +219,61 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
 
   const { data: mealRows } = await adminSupabase
     .from("meal_plans")
-    .select("id, meal_date, custom_title, note, meal_type")
+    .select("id, meal_date, recipe_id, custom_title, note, meal_type")
     .eq("household_id", membership.householdId)
     .eq("meal_type", "dinner")
     .gte("meal_date", toDateStr(range.queryStart))
     .lte("meal_date", toDateStr(range.queryEnd))
     .order("updated_at", { ascending: false });
 
+  const recipeIds = Array.from(new Set((mealRows ?? []).map((row) => row.recipe_id).filter(Boolean)));
+  const recipeNameMap = new Map<string, string>();
+
+  if (recipeIds.length > 0) {
+    const { data: recipeRows } = await adminSupabase
+      .from("recipes")
+      .select("id, name")
+      .eq("household_id", membership.householdId)
+      .in("id", recipeIds)
+      .is("archived_at", null);
+
+    (recipeRows ?? []).forEach((recipe) => {
+      recipeNameMap.set(recipe.id, recipe.name);
+    });
+  }
+
   const mealByDate = new Map<string, DailyMealPlan>();
 
   (mealRows ?? []).forEach((row) => {
     if (!mealByDate.has(row.meal_date)) {
+      const recipeName = row.recipe_id ? recipeNameMap.get(row.recipe_id) ?? null : null;
+
       mealByDate.set(row.meal_date, {
         id: row.id,
         date: row.meal_date,
-        title: row.custom_title,
+        recipeId: row.recipe_id,
+        recipeName,
+        customTitle: row.custom_title,
+        title: row.custom_title ?? recipeName,
         note: row.note
       });
     }
   });
 
   const dailyMealPlans = Array.from(mealByDate.values());
+
+  const { data: recipeOptionsRows } = await adminSupabase
+    .from("recipes")
+    .select("id, name")
+    .eq("household_id", membership.householdId)
+    .is("archived_at", null)
+    .order("name", { ascending: true });
+
+  const recipes: RecipeOption[] =
+    recipeOptionsRows?.map((row) => ({
+      id: row.id,
+      name: row.name
+    })) ?? [];
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date();
@@ -278,6 +314,7 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
     members,
     childcareAssignments,
     dailyMealPlans,
+    recipes,
     todayMessage,
     tomorrowWeather
   };

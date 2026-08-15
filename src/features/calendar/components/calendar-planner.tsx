@@ -31,6 +31,7 @@ import type {
   ChildcareAssignment,
   DailyMealPlan,
   HouseholdMember,
+  RecipeOption,
   TodayPartnerMessage,
   TomorrowWeather
 } from "@/features/calendar/types";
@@ -45,6 +46,7 @@ type CalendarPlannerProps = {
   members: HouseholdMember[];
   initialChildcareAssignments: ChildcareAssignment[];
   initialDailyMealPlans: DailyMealPlan[];
+  recipes: RecipeOption[];
   todayMessage: TodayPartnerMessage | null;
   tomorrowWeather: TomorrowWeather;
 };
@@ -195,6 +197,7 @@ export function CalendarPlanner({
   members,
   initialChildcareAssignments,
   initialDailyMealPlans,
+  recipes,
   todayMessage,
   tomorrowWeather
 }: CalendarPlannerProps) {
@@ -969,11 +972,27 @@ export function CalendarPlanner({
               </label>
 
               <label className="space-y-1 text-sm md:col-span-2">
+                <span className="font-medium text-slate-700">Oppskrift (valgfritt)</span>
+                <select
+                  name="dinnerRecipeId"
+                  defaultValue={selectedDayMeal?.recipeId ?? ""}
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3"
+                >
+                  <option value="">Ingen oppskrift</option>
+                  {recipes.map((recipe) => (
+                    <option key={recipe.id} value={recipe.id}>
+                      {recipe.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm md:col-span-2">
                 <span className="font-medium text-slate-700">Middag</span>
                 <input
                   name="dinnerTitle"
-                  defaultValue={selectedDayMeal?.title ?? ""}
-                  placeholder="F.eks. Pasta med kylling"
+                  defaultValue={selectedDayMeal?.customTitle ?? ""}
+                  placeholder="F.eks. Pasta med kylling (overstyring av oppskriftsnavn)"
                   className="h-10 w-full rounded-lg border border-slate-300 px-3"
                 />
               </label>

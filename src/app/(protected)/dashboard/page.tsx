@@ -20,6 +20,11 @@ const modules = [
     description: "Oppskrifter, ingredienser og planlagt bruk."
   },
   {
+    href: "/development" as Route,
+    title: "Utvikling",
+    description: "Legg inn forslag fra Vilde og prioriter hva vi bygger videre."
+  },
+  {
     href: "/finance" as Route,
     title: "Økonomi",
     description: "Plassholder for kommende økonomi-modul."

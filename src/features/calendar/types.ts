@@ -44,8 +44,16 @@ export type ChildcareAssignment = {
 export type DailyMealPlan = {
   id: string;
   date: string; // YYYY-MM-DD
+  recipeId: string | null;
+  recipeName: string | null;
+  customTitle: string | null;
   title: string | null;
   note: string | null;
+};
+
+export type RecipeOption = {
+  id: string;
+  name: string;
 };
 
 export type TodayPartnerMessage = {

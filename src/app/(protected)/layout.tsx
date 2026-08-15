@@ -9,6 +9,7 @@ const navigationItems = [
   { href: "/shopping" as Route, label: "Handleliste" },
   { href: "/calendar" as Route, label: "Kalender" },
   { href: "/recipes" as Route, label: "Oppskrifter" },
+  { href: "/development" as Route, label: "Utvikling" },
   { href: "/finance" as Route, label: "Økonomi" },
   { href: "/children" as Route, label: "Barn" }
 ];
