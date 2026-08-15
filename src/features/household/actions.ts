@@ -186,14 +186,29 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteSta
 
   const adminSupabase = createAdminSupabaseClient();
 
-  const { data: profile } = await adminSupabase
+  const { data: existingProfile } = await adminSupabase
     .from("profiles")
     .select("id")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  if (!profile) {
-    return { error: "Profil ikke funnet. Fullfør onboarding først." };
+  let profileId = existingProfile?.id ?? null;
+
+  if (!profileId) {
+    const { data: createdProfile, error: profileInsertError } = await adminSupabase
+      .from("profiles")
+      .insert({
+        auth_user_id: user.id,
+        display_name: deriveDisplayName(user.email)
+      })
+      .select("id")
+      .single();
+
+    if (profileInsertError || !createdProfile) {
+      return { error: "Kunne ikke opprette profil for invitasjon." };
+    }
+
+    profileId = createdProfile.id;
   }
 
   const now = new Date().toISOString();
@@ -220,7 +235,7 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteSta
     .from("household_members")
     .select("id")
     .eq("household_id", invite.household_id)
-    .eq("user_id", profile.id)
+    .eq("user_id", profileId)
     .maybeSingle();
 
   if (existingMember) {
@@ -231,7 +246,7 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteSta
     .from("household_members")
     .insert({
       household_id: invite.household_id,
-      user_id: profile.id,
+      user_id: profileId,
       role: "adult"
     });
 
@@ -241,7 +256,7 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteSta
 
   await adminSupabase
     .from("household_invitations")
-    .update({ used_at: now, used_by: profile.id })
+    .update({ used_at: now, used_by: profileId })
     .eq("id", invite.id);
 
   redirect("/dashboard");

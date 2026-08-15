@@ -8,11 +8,12 @@ import { AuthStatusMessage } from "@/features/auth/components/auth-status-messag
 
 const initialState: FormState = {};
 
-export function SignUpForm() {
+export function SignUpForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState(signUpAction, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium">E-post</span>
         <input
@@ -48,7 +49,7 @@ export function SignUpForm() {
 
       <p className="text-sm text-slate-600">
         Har du allerede konto?{" "}
-        <Link href="/login" className="underline">
+        <Link href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"} className="underline">
           Logg inn
         </Link>
       </p>

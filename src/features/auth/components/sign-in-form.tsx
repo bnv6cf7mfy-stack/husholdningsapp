@@ -48,7 +48,7 @@ export function SignInForm({ next }: { next?: string }) {
       </button>
 
       <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-        <Link href="/register" className="underline">
+        <Link href={next ? `/register?next=${encodeURIComponent(next)}` : "/register"} className="underline">
           Opprett konto
         </Link>
         <Link href="/reset-password" className="underline">

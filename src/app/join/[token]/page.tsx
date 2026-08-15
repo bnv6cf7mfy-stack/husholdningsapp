@@ -53,19 +53,17 @@ export default async function JoinPage({ params }: Props) {
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  if (!profile) {
-    redirect(`/onboarding?next=/join/${token}`);
-  }
+  if (profile) {
+    const { data: existingMember } = await adminSupabase
+      .from("household_members")
+      .select("id")
+      .eq("household_id", invite.household_id)
+      .eq("user_id", profile.id)
+      .maybeSingle();
 
-  const { data: existingMember } = await adminSupabase
-    .from("household_members")
-    .select("id")
-    .eq("household_id", invite.household_id)
-    .eq("user_id", profile.id)
-    .maybeSingle();
-
-  if (existingMember) {
-    redirect("/dashboard");
+    if (existingMember) {
+      redirect("/dashboard");
+    }
   }
 
   return (

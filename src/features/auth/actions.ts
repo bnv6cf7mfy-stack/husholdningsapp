@@ -72,6 +72,20 @@ export async function signUpAction(_: FormState, formData: FormData): Promise<Fo
     return { error: "Registrering feilet. Prøv igjen." };
   }
 
+  const next = formData.get("next");
+  const safeNext = typeof next === "string" && next.startsWith("/") ? next : undefined;
+
+  if (safeNext) {
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (user) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      redirect(safeNext as any);
+    }
+  }
+
   return {
     success: "Konto opprettet. Sjekk e-post for verifisering hvis det er aktivert."
   };
