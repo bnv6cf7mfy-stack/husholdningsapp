@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import {
   CalendarDays,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -50,7 +51,7 @@ type CalendarPlannerProps = {
 
 type SmartReminder = {
   id: string;
-  severity: "high" | "medium";
+  severity: "high" | "medium" | "low";
   text: string;
   targetDateKey?: string;
 };
@@ -203,6 +204,8 @@ export function CalendarPlanner({
   const [lastSavedMessage, setLastSavedMessage] = useState(todayMessage?.text ?? "");
   const [messageStatus, setMessageStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [isEditingMessage, setIsEditingMessage] = useState(false);
+  const [showAllReminders, setShowAllReminders] = useState(false);
+  const [dismissedReminderIds, setDismissedReminderIds] = useState<string[]>([]);
 
   // Map profileId -> color index for consistent per-person colors
   const memberColorMap = useMemo(() => {
@@ -408,6 +411,14 @@ export function CalendarPlanner({
       });
     }
 
+    if (reminders.length === 0) {
+      reminders.push({
+        id: "all-good",
+        severity: "low",
+        text: "Ingen kritiske paminnelser akkurat na."
+      });
+    }
+
     return reminders;
   }, [
     nextWeekdayKey,
@@ -421,6 +432,54 @@ export function CalendarPlanner({
     tomorrowKey,
     tomorrowsChildcare.pickup?.assignedPersonName
   ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(`calendar:done-reminders:${todayKey}`);
+      if (!raw) {
+        setDismissedReminderIds([]);
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setDismissedReminderIds(parsed.filter((value): value is string => typeof value === "string"));
+      } else {
+        setDismissedReminderIds([]);
+      }
+    } catch {
+      setDismissedReminderIds([]);
+    }
+  }, [todayKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(`calendar:done-reminders:${todayKey}`, JSON.stringify(dismissedReminderIds));
+  }, [dismissedReminderIds, todayKey]);
+
+  const priorityOrder: Record<SmartReminder["severity"], number> = {
+    high: 3,
+    medium: 2,
+    low: 1
+  };
+
+  const sortedReminders = useMemo(() => {
+    return [...smartReminders].sort((a, b) => priorityOrder[b.severity] - priorityOrder[a.severity]);
+  }, [smartReminders]);
+
+  const activeReminders = useMemo(() => {
+    return sortedReminders.filter((reminder) => !dismissedReminderIds.includes(reminder.id));
+  }, [dismissedReminderIds, sortedReminders]);
+
+  const visibleReminders = showAllReminders ? activeReminders : activeReminders.slice(0, 2);
+  const hiddenReminderCount = Math.max(activeReminders.length - visibleReminders.length, 0);
 
   const goToMonth = (direction: -1 | 1) => {
     const nextDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + direction, 1);
@@ -456,30 +515,73 @@ export function CalendarPlanner({
       <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-black/5 sm:p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary">Viktig i dag</p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          {smartReminders.length === 0 ? (
-            <p className="text-xs text-slate-500">Ingen kritiske paminnelser akkurat na.</p>
-          ) : (
-            smartReminders.map((reminder) => (
-              <button
-                type="button"
-                key={reminder.id}
-                onClick={() => {
-                  if (reminder.targetDateKey) {
-                    setSelectedDay(reminder.targetDateKey);
-                  }
-                }}
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                  reminder.severity === "high"
-                    ? "bg-rose-100 text-rose-800"
-                    : "bg-amber-100 text-amber-800"
-                } ${reminder.targetDateKey ? "cursor-pointer" : "cursor-default"}`}
-                title={reminder.text}
-              >
-                <Clock3 className="h-3 w-3" />
-                <span className="max-w-[360px] truncate">{reminder.text}</span>
-              </button>
-            ))
-          )}
+          {activeReminders.length === 0 ? <p className="text-xs text-slate-500">Alt er markert ferdig i dag.</p> : null}
+          {visibleReminders.map((reminder) => {
+            const severityStyle =
+              reminder.severity === "high"
+                ? "bg-rose-100 text-rose-800"
+                : reminder.severity === "medium"
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-emerald-100 text-emerald-800";
+
+            return (
+              <div key={reminder.id} className={`inline-flex items-center gap-1 rounded-full px-1 py-0.5 ${severityStyle}`}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (reminder.targetDateKey) {
+                      setSelectedDay(reminder.targetDateKey);
+                    }
+                  }}
+                  className={`inline-flex items-center gap-1 rounded-full px-1 text-xs font-medium ${reminder.targetDateKey ? "cursor-pointer" : "cursor-default"}`}
+                  title={reminder.text}
+                >
+                  <Clock3 className="h-3 w-3" />
+                  <span className="max-w-[320px] truncate">{reminder.text}</span>
+                </button>
+                {reminder.id !== "all-good" ? (
+                  <button
+                    type="button"
+                    className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/80 text-slate-700"
+                    onClick={() => {
+                      setDismissedReminderIds((current) => (current.includes(reminder.id) ? current : [...current, reminder.id]));
+                    }}
+                    title="Marker som ferdig"
+                    aria-label="Marker som ferdig"
+                  >
+                    <Check className="h-3 w-3" />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+          {hiddenReminderCount > 0 ? (
+            <button
+              type="button"
+              className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+              onClick={() => setShowAllReminders(true)}
+            >
+              Vis alle (+{hiddenReminderCount})
+            </button>
+          ) : null}
+          {showAllReminders && activeReminders.length > 2 ? (
+            <button
+              type="button"
+              className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+              onClick={() => setShowAllReminders(false)}
+            >
+              Vis færre
+            </button>
+          ) : null}
+          {dismissedReminderIds.length > 0 ? (
+            <button
+              type="button"
+              className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
+              onClick={() => setDismissedReminderIds([])}
+            >
+              Nullstill ferdige ({dismissedReminderIds.length})
+            </button>
+          ) : null}
         </div>
         <div className="mt-2 grid gap-2 md:grid-cols-4">
             <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
