@@ -8,10 +8,13 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 const suggestionStatusValues = ["new", "planned", "done"] as const;
 const suggestionPriorityValues = ["low", "medium", "high"] as const;
 
+const suggestionAreaValues = ["kalender", "handleliste", "oppskrifter", "barn", "økonomi", "utvikling", "generelt"] as const;
+
 const addSuggestionSchema = z.object({
   title: z.string().trim().min(1).max(240),
   details: z.string().trim().max(4000).optional(),
-  priority: z.enum(suggestionPriorityValues)
+  priority: z.enum(suggestionPriorityValues),
+  area: z.enum(suggestionAreaValues).optional()
 });
 
 const updateSuggestionStatusSchema = z.object({
@@ -67,7 +70,8 @@ export async function addDevelopmentSuggestionAction(formData: FormData) {
   const parsed = addSuggestionSchema.safeParse({
     title: formData.get("title"),
     details: formData.get("details") || undefined,
-    priority: formData.get("priority") || "medium"
+    priority: formData.get("priority") || "medium",
+    area: formData.get("area") || undefined
   });
 
   if (!parsed.success) {
@@ -89,6 +93,7 @@ export async function addDevelopmentSuggestionAction(formData: FormData) {
     title: parsed.data.title,
     details: parsed.data.details || null,
     priority: parsed.data.priority,
+    area: parsed.data.area ?? null,
     status: "new",
     submitted_by: context.profileId
   });

@@ -4,6 +4,17 @@ import { getCurrentMembership } from "@/features/household/queries";
 
 export type SuggestionPriority = "low" | "medium" | "high";
 export type SuggestionStatus = "new" | "planned" | "done";
+export type SuggestionArea = "kalender" | "handleliste" | "oppskrifter" | "barn" | "økonomi" | "utvikling" | "generelt";
+
+export const suggestionAreaLabels: Record<SuggestionArea, string> = {
+  kalender: "Kalender",
+  handleliste: "Handleliste",
+  oppskrifter: "Oppskrifter",
+  barn: "Barn",
+  økonomi: "Økonomi",
+  utvikling: "Utvikling",
+  generelt: "Generelt"
+};
 
 export type DevelopmentSuggestion = {
   id: string;
@@ -11,6 +22,7 @@ export type DevelopmentSuggestion = {
   details: string | null;
   priority: SuggestionPriority;
   status: SuggestionStatus;
+  area: SuggestionArea | null;
   createdAt: string;
   submittedByName: string;
 };
@@ -51,7 +63,7 @@ export async function getDevelopmentData(): Promise<DevelopmentData | null> {
 
   const { data: suggestionRows } = await adminSupabase
     .from("development_suggestions")
-    .select("id, title, details, priority, status, created_at, submitted_by")
+    .select("id, title, details, priority, status, area, created_at, submitted_by")
     .eq("household_id", membership.householdId)
     .is("archived_at", null)
     .order("created_at", { ascending: false });
@@ -80,6 +92,7 @@ export async function getDevelopmentData(): Promise<DevelopmentData | null> {
         details: row.details,
         priority: row.priority,
         status: row.status,
+        area: row.area ?? null,
         createdAt: row.created_at,
         submittedByName: profileNameMap.get(row.submitted_by) ?? "Ukjent"
       })) ?? []

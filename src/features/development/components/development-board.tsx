@@ -8,7 +8,8 @@ import {
   archiveDevelopmentSuggestionAction,
   updateDevelopmentSuggestionStatusAction
 } from "@/features/development/actions";
-import type { DevelopmentSuggestion, SuggestionStatus } from "@/features/development/queries";
+import type { DevelopmentSuggestion, SuggestionArea, SuggestionStatus, suggestionAreaLabels as areaLabelsType } from "@/features/development/queries";
+import { suggestionAreaLabels } from "@/features/development/queries";
 
 type DevelopmentBoardProps = {
   initialSuggestions: DevelopmentSuggestion[];
@@ -16,6 +17,8 @@ type DevelopmentBoardProps = {
 };
 
 const statusOrder: SuggestionStatus[] = ["new", "planned", "done"];
+
+const areaOptions = Object.entries(suggestionAreaLabels) as [SuggestionArea, string][];
 
 const statusLabels: Record<SuggestionStatus, string> = {
   new: "Ny",
@@ -62,7 +65,7 @@ export function DevelopmentBoard({ initialSuggestions, currentUserName }: Develo
     }));
   }, [suggestions]);
 
-  const addSuggestion = (title: string, details: string, priority: "low" | "medium" | "high") => {
+  const addSuggestion = (title: string, details: string, priority: "low" | "medium" | "high", area: string) => {
     const trimmed = title.trim();
 
     if (!trimmed) {
@@ -74,6 +77,7 @@ export function DevelopmentBoard({ initialSuggestions, currentUserName }: Develo
       title: trimmed,
       details: details.trim() || null,
       priority,
+      area: (area as SuggestionArea) || null,
       status: "new",
       createdAt: new Date().toISOString(),
       submittedByName: currentUserName
@@ -86,6 +90,7 @@ export function DevelopmentBoard({ initialSuggestions, currentUserName }: Develo
       formData.set("title", trimmed);
       formData.set("details", details.trim());
       formData.set("priority", priority);
+      formData.set("area", area);
 
       await addDevelopmentSuggestionAction(formData);
       router.refresh();
@@ -132,8 +137,9 @@ export function DevelopmentBoard({ initialSuggestions, currentUserName }: Develo
               | "low"
               | "medium"
               | "high";
+            const area = (form.elements.namedItem("area") as HTMLSelectElement | null)?.value ?? "";
 
-            addSuggestion(title, details, priority);
+            addSuggestion(title, details, priority, area);
             form.reset();
           }}
         >
@@ -143,6 +149,12 @@ export function DevelopmentBoard({ initialSuggestions, currentUserName }: Develo
             placeholder="Kort tittel, f.eks. Deling av ukeplan"
             className="h-10 rounded-lg border border-slate-300 px-3 text-sm"
           />
+          <select name="area" className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
+            <option value="">Område (valgfritt)</option>
+            {areaOptions.map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
           <select name="priority" defaultValue="medium" className="h-10 rounded-lg border border-slate-300 px-3 text-sm">
             <option value="low">Lav prioritet</option>
             <option value="medium">Medium prioritet</option>
@@ -188,6 +200,11 @@ export function DevelopmentBoard({ initialSuggestions, currentUserName }: Develo
                           {priorityLabels[item.priority]}
                         </span>
                       </div>
+                      {item.area ? (
+                        <span className="mt-1 inline-block rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                          {suggestionAreaLabels[item.area]}
+                        </span>
+                      ) : null}
 
                       {item.details ? <p className="mt-1 text-sm text-slate-600">{item.details}</p> : null}
 
