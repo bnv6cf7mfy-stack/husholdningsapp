@@ -8,8 +8,9 @@ import {
   archiveDevelopmentSuggestionAction,
   updateDevelopmentSuggestionStatusAction
 } from "@/features/development/actions";
-import type { DevelopmentSuggestion, SuggestionArea, SuggestionStatus, suggestionAreaLabels as areaLabelsType } from "@/features/development/queries";
-import { suggestionAreaLabels } from "@/features/development/queries";
+import type { DevelopmentSuggestion, SuggestionStatus } from "@/features/development/queries";
+import type { SuggestionArea } from "@/features/development/types";
+import { suggestionAreaLabels } from "@/features/development/types";
 
 type DevelopmentBoardProps = {
   initialSuggestions: DevelopmentSuggestion[];

@@ -1,20 +1,9 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/features/household/queries";
-
-export type SuggestionPriority = "low" | "medium" | "high";
-export type SuggestionStatus = "new" | "planned" | "done";
-export type SuggestionArea = "kalender" | "handleliste" | "oppskrifter" | "barn" | "økonomi" | "utvikling" | "generelt";
-
-export const suggestionAreaLabels: Record<SuggestionArea, string> = {
-  kalender: "Kalender",
-  handleliste: "Handleliste",
-  oppskrifter: "Oppskrifter",
-  barn: "Barn",
-  økonomi: "Økonomi",
-  utvikling: "Utvikling",
-  generelt: "Generelt"
-};
+import type { SuggestionArea, SuggestionPriority, SuggestionStatus } from "@/features/development/types";
+export type { SuggestionArea, SuggestionPriority, SuggestionStatus } from "@/features/development/types";
+export { suggestionAreaLabels } from "@/features/development/types";
 
 export type DevelopmentSuggestion = {
   id: string;
