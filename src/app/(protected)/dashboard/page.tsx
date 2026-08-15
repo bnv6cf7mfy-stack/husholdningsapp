@@ -3,6 +3,8 @@ import Link from "next/link";
 import type { Route } from "next";
 import { getCurrentMembership } from "@/features/household/queries";
 import { getShoppingData } from "@/features/shopping/queries";
+import { getTodayWidgetData } from "@/features/calendar/today-widget-queries";
+import { TodayWidget } from "@/features/calendar/components/today-widget";
 
 const quickActions = [
   {
@@ -35,8 +37,11 @@ const upcomingModules = [
 ];
 
 export default async function DashboardPage() {
-  const membership = await getCurrentMembership();
-  const shoppingData = await getShoppingData();
+  const [membership, shoppingData, todayData] = await Promise.all([
+    getCurrentMembership(),
+    getShoppingData(),
+    getTodayWidgetData()
+  ]);
 
   if (!membership) {
     redirect("/onboarding");
@@ -68,7 +73,7 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
-
+      {todayData && <TodayWidget data={todayData} />}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {quickActions.map((module) => (
           <Link

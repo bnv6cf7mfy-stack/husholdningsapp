@@ -3,7 +3,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/features/auth/actions";
-import { PushNotificationToggle } from "@/features/notifications/components/push-notification-toggle";
+
 
 type NavigationItem = {
   href: Route;
@@ -21,7 +21,7 @@ const navigationItems = [
   { href: "/development" as Route, label: "Utvikling", enabled: false, badge: "Under utvikling" },
   { href: "/finance" as Route, label: "Økonomi", enabled: false, badge: "Kommer snart" },
   { href: "/children" as Route, label: "Barn", enabled: false, badge: "Under utvikling" },
-  { href: "/household" as Route, label: "Husholdning" }
+  { href: "/settings" as Route, label: "Innstillinger" }
 ] satisfies NavigationItem[];
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -72,14 +72,11 @@ export default async function ProtectedLayout({ children }: { children: React.Re
               );
             })}
           </div>
-          <div className="flex items-center gap-2">
-            <PushNotificationToggle />
-            <form action={signOutAction}>
-              <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                Logg ut
-              </button>
-            </form>
-          </div>
+          <form action={signOutAction}>
+            <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+              Logg ut
+            </button>
+          </form>
         </div>
       </header>
       {children}
