@@ -585,8 +585,8 @@ export function CalendarPlanner({
             </button>
           ) : null}
         </div>
-        <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto_1fr_2fr]">
-            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5">
+            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2 sm:col-span-1">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dagens avtaler</h2>
             {todaysEvents.length === 0 ? (
               <p className="mt-1 text-sm text-slate-500">Ingen avtaler i dag.</p>
@@ -609,7 +609,7 @@ export function CalendarPlanner({
             )}
             </article>
 
-            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
+            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2 sm:col-span-1">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">BHG</h2>
               <div className="mt-1 flex items-center gap-3">
                 {[
@@ -634,7 +634,7 @@ export function CalendarPlanner({
               <p className="mt-1 truncate text-[11px] text-slate-500">L = levering, H = henting</p>
             </article>
 
-            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
+            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2 sm:col-span-1">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Middag i dag</h2>
               {todaysDinner ? (
                 <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -646,7 +646,7 @@ export function CalendarPlanner({
               )}
             </article>
 
-            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
+            <article className="col-span-2 min-w-0 rounded-lg border border-slate-200 px-2.5 py-2 sm:col-span-2">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-bold text-slate-800">Beskjed i dag</h2>
               </div>
