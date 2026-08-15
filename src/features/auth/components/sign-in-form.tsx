@@ -8,11 +8,12 @@ import { AuthStatusMessage } from "@/features/auth/components/auth-status-messag
 
 const initialState: FormState = {};
 
-export function SignInForm() {
+export function SignInForm({ next }: { next?: string }) {
   const [state, formAction, pending] = useActionState(signInAction, initialState);
 
   return (
     <form action={formAction} className="flex flex-col gap-4">
+      {next && <input type="hidden" name="next" value={next} />}
       <label className="flex flex-col gap-1">
         <span className="text-sm font-medium">E-post</span>
         <input

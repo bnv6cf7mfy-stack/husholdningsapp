@@ -81,3 +81,57 @@ export async function getCurrentMembership(authUserId?: string): Promise<Current
     householdName: household?.name ?? "Husholdning"
   };
 }
+
+export type HouseholdMember = {
+  id: string;
+  displayName: string;
+  role: "owner" | "adult" | "member";
+  joinedAt: string;
+};
+
+export type HouseholdPageData = {
+  householdId: string;
+  householdName: string;
+  currentRole: "owner" | "adult" | "member";
+  members: HouseholdMember[];
+};
+
+export async function getHouseholdPageData(): Promise<HouseholdPageData | null> {
+  const membership = await getCurrentMembership();
+
+  if (!membership) {
+    return null;
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: members } = await adminSupabase
+    .from("household_members")
+    .select("id, role, joined_at, user_id")
+    .eq("household_id", membership.householdId)
+    .order("joined_at", { ascending: true });
+
+  if (!members) {
+    return null;
+  }
+
+  const profileIds = members.map((m) => m.user_id);
+  const { data: profiles } = await adminSupabase
+    .from("profiles")
+    .select("id, display_name")
+    .in("id", profileIds);
+
+  const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+
+  return {
+    householdId: membership.householdId,
+    householdName: membership.householdName,
+    currentRole: membership.role,
+    members: members.map((m) => ({
+      id: m.id,
+      displayName: profileMap.get(m.user_id) ?? "Ukjent",
+      role: m.role,
+      joinedAt: m.joined_at
+    }))
+  };
+}

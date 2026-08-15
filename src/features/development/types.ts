@@ -9,6 +9,17 @@ export type SuggestionArea =
   | "utvikling"
   | "generelt";
 
+export type DevelopmentSuggestion = {
+  id: string;
+  title: string;
+  details: string | null;
+  priority: SuggestionPriority;
+  status: SuggestionStatus;
+  area: SuggestionArea | null;
+  createdAt: string;
+  submittedByName: string;
+};
+
 export const suggestionAreaLabels: Record<SuggestionArea, string> = {
   kalender: "Kalender",
   handleliste: "Handleliste",

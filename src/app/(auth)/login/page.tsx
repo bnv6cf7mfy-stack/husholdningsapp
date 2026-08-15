@@ -3,14 +3,21 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { SignInForm } from "@/features/auth/components/sign-in-form";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   const supabase = await createServerSupabaseClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
 
+  const { next } = await searchParams;
+
   if (user) {
-    redirect("/");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    redirect((next && next.startsWith("/") ? next : "/") as any);
   }
 
   return (
@@ -19,7 +26,7 @@ export default async function LoginPage() {
         <h1 className="text-2xl font-bold">Logg inn</h1>
         <p className="mt-2 text-sm text-slate-600">Velkommen tilbake til husholdningsappen.</p>
         <div className="mt-6">
-          <SignInForm />
+          <SignInForm next={next} />
         </div>
         <p className="mt-5 text-sm text-slate-600">
           Ingen konto?{" "}

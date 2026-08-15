@@ -40,7 +40,10 @@ export async function signInAction(_: FormState, formData: FormData): Promise<Fo
     return { error: "Innlogging feilet. Sjekk e-post og passord." };
   }
 
-  redirect("/dashboard");
+  const next = formData.get("next");
+  const safeNext = typeof next === "string" && next.startsWith("/") ? next : "/dashboard";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  redirect(safeNext as any);
 }
 
 export async function signUpAction(_: FormState, formData: FormData): Promise<FormState> {

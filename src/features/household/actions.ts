@@ -125,3 +125,131 @@ export async function createHouseholdAction(
 
   redirect("/dashboard");
 }
+
+// ---- Invitation actions ----
+
+export type InviteFormState = {
+  error?: string;
+  token?: string;
+};
+
+export async function createInviteAction(_: InviteFormState, _formData: FormData): Promise<InviteFormState> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Ikke innlogget." };
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: profile } = await adminSupabase
+    .from("profiles")
+    .select("id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    return { error: "Profil ikke funnet." };
+  }
+
+  const { data: membership } = await adminSupabase
+    .from("household_members")
+    .select("household_id, role")
+    .eq("user_id", profile.id)
+    .maybeSingle();
+
+  if (!membership || membership.role !== "owner") {
+    return { error: "Kun husholdningseier kan invitere." };
+  }
+
+  const { data: invite, error } = await adminSupabase
+    .from("household_invitations")
+    .insert({
+      household_id: membership.household_id,
+      invited_by: profile.id
+    })
+    .select("token")
+    .single();
+
+  if (error || !invite) {
+    return { error: "Kunne ikke opprette invitasjon." };
+  }
+
+  return { token: invite.token };
+}
+
+export type AcceptInviteState = {
+  error?: string;
+};
+
+export async function acceptInviteAction(token: string): Promise<AcceptInviteState> {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect(`/login?next=/join/${token}`);
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: profile } = await adminSupabase
+    .from("profiles")
+    .select("id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  if (!profile) {
+    return { error: "Profil ikke funnet. Fullfør onboarding først." };
+  }
+
+  const now = new Date().toISOString();
+
+  const { data: invite } = await adminSupabase
+    .from("household_invitations")
+    .select("id, household_id, used_at, expires_at")
+    .eq("token", token)
+    .maybeSingle();
+
+  if (!invite) {
+    return { error: "Ugyldig invitasjonslenke." };
+  }
+
+  if (invite.used_at) {
+    return { error: "Denne invitasjonslenken er allerede brukt." };
+  }
+
+  if (invite.expires_at < now) {
+    return { error: "Invitasjonslenken er utløpt (gyldig i 7 dager)." };
+  }
+
+  const { data: existingMember } = await adminSupabase
+    .from("household_members")
+    .select("id")
+    .eq("household_id", invite.household_id)
+    .eq("user_id", profile.id)
+    .maybeSingle();
+
+  if (existingMember) {
+    redirect("/dashboard");
+  }
+
+  const { error: memberError } = await adminSupabase
+    .from("household_members")
+    .insert({
+      household_id: invite.household_id,
+      user_id: profile.id,
+      role: "adult"
+    });
+
+  if (memberError) {
+    return { error: "Kunne ikke legge deg til i husholdningen." };
+  }
+
+  await adminSupabase
+    .from("household_invitations")
+    .update({ used_at: now, used_by: profile.id })
+    .eq("id", invite.id);
+
+  redirect("/dashboard");
+}

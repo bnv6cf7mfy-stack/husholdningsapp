@@ -1,20 +1,9 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/features/household/queries";
-import type { SuggestionArea, SuggestionPriority, SuggestionStatus } from "@/features/development/types";
-export type { SuggestionArea, SuggestionPriority, SuggestionStatus } from "@/features/development/types";
+import type { SuggestionArea, SuggestionPriority, SuggestionStatus, DevelopmentSuggestion } from "@/features/development/types";
+export type { SuggestionArea, SuggestionPriority, SuggestionStatus, DevelopmentSuggestion } from "@/features/development/types";
 export { suggestionAreaLabels } from "@/features/development/types";
-
-export type DevelopmentSuggestion = {
-  id: string;
-  title: string;
-  details: string | null;
-  priority: SuggestionPriority;
-  status: SuggestionStatus;
-  area: SuggestionArea | null;
-  createdAt: string;
-  submittedByName: string;
-};
 
 export type DevelopmentData = {
   householdName: string;
