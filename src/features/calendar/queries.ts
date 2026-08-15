@@ -1,7 +1,15 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentMembership } from "@/features/household/queries";
-import type { CalendarChild, CalendarEvent, ChildcareAssignment, HouseholdMember } from "@/features/calendar/types";
+import { getTomorrowWeatherSummary } from "@/lib/weather/yr";
+import type {
+  CalendarChild,
+  CalendarEvent,
+  ChildcareAssignment,
+  DailyMealPlan,
+  HouseholdMember,
+  TomorrowWeather
+} from "@/features/calendar/types";
 
 export type CalendarData = {
   householdName: string;
@@ -11,6 +19,8 @@ export type CalendarData = {
   events: CalendarEvent[];
   members: HouseholdMember[];
   childcareAssignments: ChildcareAssignment[];
+  dailyMealPlans: DailyMealPlan[];
+  tomorrowWeather: TomorrowWeather;
 };
 
 function parseMonth(monthInput?: string) {
@@ -199,6 +209,31 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
       assignedPersonName: personNameMap.get(row.assigned_person_id) ?? "Ukjent"
     }));
 
+  const { data: mealRows } = await adminSupabase
+    .from("meal_plans")
+    .select("id, meal_date, custom_title, note, meal_type")
+    .eq("household_id", membership.householdId)
+    .eq("meal_type", "dinner")
+    .gte("meal_date", toDateStr(range.queryStart))
+    .lte("meal_date", toDateStr(range.queryEnd))
+    .order("updated_at", { ascending: false });
+
+  const mealByDate = new Map<string, DailyMealPlan>();
+
+  (mealRows ?? []).forEach((row) => {
+    if (!mealByDate.has(row.meal_date)) {
+      mealByDate.set(row.meal_date, {
+        id: row.id,
+        date: row.meal_date,
+        title: row.custom_title,
+        note: row.note
+      });
+    }
+  });
+
+  const dailyMealPlans = Array.from(mealByDate.values());
+  const tomorrowWeather = await getTomorrowWeatherSummary();
+
   return {
     householdName: membership.householdName,
     currentUserName,
@@ -206,6 +241,8 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
     children,
     events,
     members,
-    childcareAssignments
+    childcareAssignments,
+    dailyMealPlans,
+    tomorrowWeather
   };
 }

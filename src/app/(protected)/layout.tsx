@@ -6,14 +6,11 @@ import { signOutAction } from "@/features/auth/actions";
 
 const navigationItems = [
   { href: "/dashboard" as Route, label: "Dashboard" },
-  { href: "/children" as Route, label: "Barn" },
   { href: "/shopping" as Route, label: "Handleliste" },
   { href: "/calendar" as Route, label: "Kalender" },
-  { href: "/childcare" as Route, label: "Barnehage" },
-  { href: "/meals" as Route, label: "Middag" },
   { href: "/recipes" as Route, label: "Oppskrifter" },
   { href: "/finance" as Route, label: "Økonomi" },
-  { href: "/household" as Route, label: "Household" }
+  { href: "/children" as Route, label: "Barn" }
 ];
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {

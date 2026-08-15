@@ -40,3 +40,22 @@ export type ChildcareAssignment = {
   assignedPersonId: string;
   assignedPersonName: string;
 };
+
+export type DailyMealPlan = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string | null;
+  note: string | null;
+};
+
+export type TomorrowWeather = {
+  source: "yr";
+  tomorrowDate: string; // YYYY-MM-DD in Europe/Oslo
+  locationLabel: string;
+  isRainExpected: boolean;
+  maxPrecipMm: number;
+  symbolCode?: string;
+  minTempC?: number;
+  maxTempC?: number;
+  error?: string;
+};

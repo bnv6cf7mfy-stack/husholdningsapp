@@ -25,6 +25,8 @@ export default async function CalendarPage({ searchParams }: CalendarPageProps) 
       initialEvents={data.events}
       members={data.members}
       initialChildcareAssignments={data.childcareAssignments}
+      initialDailyMealPlans={data.dailyMealPlans}
+      tomorrowWeather={data.tomorrowWeather}
     />
   );
 }

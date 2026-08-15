@@ -247,6 +247,115 @@ export async function saveChildcareWeekAction(formData: FormData) {
   revalidatePath("/calendar");
 }
 
+const saveCalendarDayDetailsSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  dropoffProfileId: z.string().uuid().optional().or(z.literal("")),
+  pickupProfileId: z.string().uuid().optional().or(z.literal("")),
+  dinnerTitle: z.string().trim().max(160).optional(),
+  dinnerNote: z.string().trim().max(800).optional()
+});
+
+export async function saveCalendarDayDetailsAction(formData: FormData) {
+  const parsed = saveCalendarDayDetailsSchema.safeParse({
+    date: formData.get("date"),
+    dropoffProfileId: formData.get("dropoffProfileId") || "",
+    pickupProfileId: formData.get("pickupProfileId") || "",
+    dinnerTitle: formData.get("dinnerTitle") || undefined,
+    dinnerNote: formData.get("dinnerNote") || undefined
+  });
+
+  if (!parsed.success) {
+    revalidatePath("/calendar");
+    return;
+  }
+
+  const context = await resolveCalendarContext();
+
+  if (!context) {
+    revalidatePath("/calendar");
+    return;
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: memberRows } = await adminSupabase
+    .from("household_members")
+    .select("user_id")
+    .eq("household_id", context.householdId);
+
+  const validMemberIds = new Set((memberRows ?? []).map((row) => row.user_id));
+
+  const dropoffProfileId =
+    parsed.data.dropoffProfileId && validMemberIds.has(parsed.data.dropoffProfileId)
+      ? parsed.data.dropoffProfileId
+      : null;
+  const pickupProfileId =
+    parsed.data.pickupProfileId && validMemberIds.has(parsed.data.pickupProfileId)
+      ? parsed.data.pickupProfileId
+      : null;
+
+  await adminSupabase
+    .from("childcare_assignments")
+    .delete()
+    .eq("household_id", context.householdId)
+    .eq("date", parsed.data.date);
+
+  const childcareRows: Array<{
+    household_id: string;
+    date: string;
+    assignment_type: "dropoff" | "pickup";
+    assigned_person_id: string;
+    created_by: string;
+  }> = [];
+
+  if (dropoffProfileId) {
+    childcareRows.push({
+      household_id: context.householdId,
+      date: parsed.data.date,
+      assignment_type: "dropoff",
+      assigned_person_id: dropoffProfileId,
+      created_by: context.profileId
+    });
+  }
+
+  if (pickupProfileId) {
+    childcareRows.push({
+      household_id: context.householdId,
+      date: parsed.data.date,
+      assignment_type: "pickup",
+      assigned_person_id: pickupProfileId,
+      created_by: context.profileId
+    });
+  }
+
+  if (childcareRows.length > 0) {
+    await adminSupabase.from("childcare_assignments").insert(childcareRows);
+  }
+
+  await adminSupabase
+    .from("meal_plans")
+    .delete()
+    .eq("household_id", context.householdId)
+    .eq("meal_type", "dinner")
+    .eq("meal_date", parsed.data.date);
+
+  const dinnerTitle = parsed.data.dinnerTitle?.trim() ?? "";
+  const dinnerNote = parsed.data.dinnerNote?.trim() ?? "";
+
+  if (dinnerTitle || dinnerNote) {
+    await adminSupabase.from("meal_plans").insert({
+      household_id: context.householdId,
+      meal_date: parsed.data.date,
+      meal_type: "dinner",
+      custom_title: dinnerTitle || null,
+      note: dinnerNote || null,
+      created_by: context.profileId
+    });
+  }
+
+  revalidatePath("/calendar");
+}
+
 export async function archiveCalendarEventAction(formData: FormData) {
   const eventId = String(formData.get("eventId") ?? "");
 

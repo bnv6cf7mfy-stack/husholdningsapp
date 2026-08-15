@@ -3,9 +3,34 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, MapPin, School, Trash2, User2 } from "lucide-react";
-import { archiveCalendarEventAction, createCalendarEventAction, saveChildcareWeekAction } from "@/features/calendar/actions";
-import type { CalendarChild, CalendarEvent, ChildcareAssignment, HouseholdMember } from "@/features/calendar/types";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  Cloud,
+  CloudRain,
+  CloudSun,
+  MapPin,
+  Snowflake,
+  Sun,
+  Trash2,
+  User2,
+  X
+} from "lucide-react";
+import {
+  archiveCalendarEventAction,
+  createCalendarEventAction,
+  saveCalendarDayDetailsAction
+} from "@/features/calendar/actions";
+import type {
+  CalendarChild,
+  CalendarEvent,
+  ChildcareAssignment,
+  DailyMealPlan,
+  HouseholdMember,
+  TomorrowWeather
+} from "@/features/calendar/types";
 import { calendarEventTypeLabels } from "@/features/calendar/types";
 
 type CalendarPlannerProps = {
@@ -16,6 +41,8 @@ type CalendarPlannerProps = {
   initialEvents: CalendarEvent[];
   members: HouseholdMember[];
   initialChildcareAssignments: ChildcareAssignment[];
+  initialDailyMealPlans: DailyMealPlan[];
+  tomorrowWeather: TomorrowWeather;
 };
 
 // Deterministic color palette per household member (by join order)
@@ -65,28 +92,62 @@ function formatDateTime(value: string, allDay: boolean) {
   }).format(date);
 }
 
+function toDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function getWeatherVisual(symbolCode?: string) {
+  const code = (symbolCode ?? "").toLowerCase();
+
+  if (code.includes("rain") || code.includes("sleet")) {
+    return {
+      Icon: CloudRain,
+      text: "Regn"
+    };
+  }
+
+  if (code.includes("snow")) {
+    return {
+      Icon: Snowflake,
+      text: "Snø"
+    };
+  }
+
+  if (code.includes("clearsky")) {
+    return {
+      Icon: Sun,
+      text: "Klarvær"
+    };
+  }
+
+  if (code.includes("partlycloudy")) {
+    return {
+      Icon: CloudSun,
+      text: "Delvis skyet"
+    };
+  }
+
+  if (code.includes("cloudy") || code.includes("fair")) {
+    return {
+      Icon: Cloud,
+      text: "Skyet"
+    };
+  }
+
+  return {
+    Icon: Cloud,
+    text: "Ukjent vær"
+  };
+}
+
 function eventSort(a: CalendarEvent, b: CalendarEvent) {
   return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
-}
-
-function getMondayOfWeek(date: Date): string {
-  const d = new Date(date);
-  const day = d.getDay(); // 0=Sun
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function shiftWeek(mondayStr: string, weeks: number): string {
-  const d = new Date(`${mondayStr}T00:00:00`);
-  d.setDate(d.getDate() + weeks * 7);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function addDaysToStr(dateStr: string, days: number): string {
-  const d = new Date(`${dateStr}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export function CalendarPlanner({
@@ -96,7 +157,9 @@ export function CalendarPlanner({
   children,
   initialEvents,
   members,
-  initialChildcareAssignments
+  initialChildcareAssignments,
+  initialDailyMealPlans,
+  tomorrowWeather
 }: CalendarPlannerProps) {
   const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
@@ -123,18 +186,17 @@ export function CalendarPlanner({
     });
     return map;
   }, [initialChildcareAssignments]);
+
+  const mealByDay = useMemo(() => {
+    const map = new Map<string, DailyMealPlan>();
+    initialDailyMealPlans.forEach((meal) => {
+      map.set(meal.date, meal);
+    });
+    return map;
+  }, [initialDailyMealPlans]);
+
   const [pending, startTransition] = useTransition();
-  const [weekStart, setWeekStart] = useState(() => getMondayOfWeek(new Date()));
-
-  const weekDayDates = useMemo(
-    () => [0, 1, 2, 3, 4].map((offset) => addDaysToStr(weekStart, offset)),
-    [weekStart]
-  );
-
-  const weekLabel = useMemo(() => {
-    const d = new Date(`${weekStart}T00:00:00`);
-    return new Intl.DateTimeFormat("nb-NO", { day: "numeric", month: "short" }).format(d);
-  }, [weekStart]);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   const monthDate = useMemo(() => parseMonthKey(month), [month]);
 
@@ -182,6 +244,52 @@ export function CalendarPlanner({
       .slice(0, 8);
   }, [events]);
 
+  const selectedDayEvents = selectedDay ? eventsByDay.get(selectedDay) ?? [] : [];
+  const selectedDayChildcare = selectedDay
+    ? childcareByDay.get(selectedDay) ?? { dropoff: null, pickup: null }
+    : { dropoff: null, pickup: null };
+  const selectedDayMeal = selectedDay ? mealByDay.get(selectedDay) ?? null : null;
+  const selectedDayLabel = selectedDay
+    ? new Intl.DateTimeFormat("nb-NO", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric"
+      }).format(new Date(`${selectedDay}T00:00:00`))
+    : "";
+
+  const today = new Date();
+  const todayKey = toDateKey(today);
+  const tomorrowKey = toDateKey(addDays(today, 1));
+
+  const todaysEvents = eventsByDay.get(todayKey) ?? [];
+  const todaysChildcare = childcareByDay.get(todayKey) ?? { dropoff: null, pickup: null };
+  const todaysDinner = mealByDay.get(todayKey) ?? null;
+  const tomorrowsChildcare = childcareByDay.get(tomorrowKey) ?? { dropoff: null, pickup: null };
+
+  const hasTomorrowPickup = Boolean(tomorrowsChildcare.pickup?.assignedPersonName);
+  const shouldShowRainwearReminder = tomorrowWeather.isRainExpected && hasTomorrowPickup;
+  const weatherVisual = getWeatherVisual(tomorrowWeather.symbolCode);
+  const weatherStatus = tomorrowWeather.error
+    ? {
+        label: "Værdata mangler",
+        style: "bg-slate-100 text-slate-700"
+      }
+    : shouldShowRainwearReminder
+      ? {
+          label: "Regn + henting",
+          style: "bg-rose-100 text-rose-800"
+        }
+      : tomorrowWeather.isRainExpected
+        ? {
+            label: "Regn mulig",
+            style: "bg-amber-100 text-amber-800"
+          }
+        : {
+            label: "Lite regnrisiko",
+            style: "bg-emerald-100 text-emerald-800"
+          };
+
   const goToMonth = (direction: -1 | 1) => {
     const nextDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + direction, 1);
     const nextKey = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
@@ -209,8 +317,97 @@ export function CalendarPlanner({
         <p className="text-sm font-semibold uppercase tracking-wide text-primary">Kalender</p>
         <h1 className="mt-2 text-3xl font-bold">{householdName}</h1>
         <p className="mt-3 text-sm text-slate-600">
-          Planlegg familiens uke med tydelig månedsvisning, rask registrering og kobling til barn.
+          Planlegg familien i ett sted. Klikk en dag for a legge inn eller redigere barnehage, middag og avtaler.
         </p>
+      </section>
+
+      <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary">Viktig i dag</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <article className="rounded-xl border border-slate-200 p-3">
+            <h2 className="text-sm font-bold text-slate-800">Dagens avtaler</h2>
+            {todaysEvents.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">Ingen avtaler i dag.</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {todaysEvents.slice(0, 4).map((event) => (
+                  <li key={event.id} className="text-sm text-slate-700">
+                    <span className="font-semibold">{event.allDay ? "Hele dagen" : formatDateTime(event.startsAt, false).split(" ").at(-1)}</span>{" "}
+                    {event.title}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
+
+          <article className="rounded-xl border border-slate-200 p-3">
+            <h2 className="text-sm font-bold text-slate-800">Barnehage i dag</h2>
+            <div className="mt-2 space-y-2 text-sm text-slate-700">
+              <p>
+                <span className="font-semibold">Levering:</span>{" "}
+                {todaysChildcare.dropoff?.assignedPersonName ?? "Ikke satt"}
+              </p>
+              <p>
+                <span className="font-semibold">Henting:</span>{" "}
+                {todaysChildcare.pickup?.assignedPersonName ?? "Ikke satt"}
+              </p>
+            </div>
+          </article>
+
+          <article className="rounded-xl border border-slate-200 p-3">
+            <h2 className="text-sm font-bold text-slate-800">Middag i dag</h2>
+            {todaysDinner ? (
+              <div className="mt-2 space-y-1">
+                <p className="text-sm font-semibold text-slate-700">{todaysDinner.title || "Middag"}</p>
+                {todaysDinner.note ? <p className="text-sm text-slate-600">{todaysDinner.note}</p> : null}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-500">Ikke planlagt enda.</p>
+            )}
+          </article>
+        </div>
+
+        <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-600">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="font-semibold text-slate-700">I morgen (Yr)</p>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${weatherStatus.style}`}>
+              {weatherStatus.label}
+            </span>
+          </div>
+
+          {!tomorrowWeather.error ? (
+            <div className="mt-2 flex items-center gap-2 text-slate-700">
+              <weatherVisual.Icon className="h-4 w-4" />
+              <p className="text-sm">
+                {weatherVisual.text}
+                {typeof tomorrowWeather.minTempC === "number" && typeof tomorrowWeather.maxTempC === "number"
+                  ? ` · ${tomorrowWeather.minTempC}° til ${tomorrowWeather.maxTempC}°`
+                  : ""}
+              </p>
+            </div>
+          ) : null}
+
+          {tomorrowWeather.error ? (
+            <p className="mt-1">Klarte ikke hente vaerdata akkurat na. Prover igjen automatisk senere.</p>
+          ) : shouldShowRainwearReminder ? (
+            <p className="mt-1">
+              Regn er meldt i morgen (ca. {tomorrowWeather.maxPrecipMm} mm). Planlagt henting:{" "}
+              <span className="font-medium">{tomorrowsChildcare.pickup?.assignedPersonName ?? "Ikke satt"}</span>.
+              Husk regntoy hjem fra barnehage.
+            </p>
+          ) : tomorrowWeather.isRainExpected ? (
+            <p className="mt-1">
+              Regn er meldt i morgen (ca. {tomorrowWeather.maxPrecipMm} mm), men ingen henting er satt enda.
+              Sett henting i kalenderdagen for i morgen for a fa mer konkret paminnelse.
+            </p>
+          ) : (
+            <p className="mt-1">
+              Ingen tydelig regnindikasjon i morgen. Planlagt henting:{" "}
+              <span className="font-medium">{tomorrowsChildcare.pickup?.assignedPersonName ?? "Ikke satt"}</span>.
+            </p>
+          )}
+          <p className="mt-1 text-xs text-slate-500">Datakilde: Yr ({tomorrowWeather.locationLabel})</p>
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[2fr_1fr]">
@@ -250,10 +447,13 @@ export function CalendarPlanner({
               const weekdayIndex = (day.getDay() + 6) % 7;
               const isWeekday = weekdayIndex <= 4;
               const childcare = isWeekday ? childcareByDay.get(dayKey) : undefined;
+              const dinner = mealByDay.get(dayKey);
 
               return (
-                <div
+                <button
+                  type="button"
                   key={dayKey}
+                  onClick={() => setSelectedDay(dayKey)}
                   className={`min-h-24 rounded-xl border p-1.5 ${inCurrentMonth ? "border-slate-200 bg-white" : "border-slate-100 bg-slate-50"}`}
                 >
                   <p className={`text-xs font-semibold leading-none ${inCurrentMonth ? "text-slate-700" : "text-slate-400"}`}>{day.getDate()}</p>
@@ -284,6 +484,12 @@ export function CalendarPlanner({
                   )}
 
                   <div className="mt-1 space-y-0.5">
+                    {dinner ? (
+                      <p className="truncate rounded bg-amber-100 px-1 py-px text-[10px] font-medium leading-tight text-amber-800">
+                        M: {dinner.title || "Middag"}
+                      </p>
+                    ) : null}
+
                     {dayEvents.slice(0, 2).map((event) => (
                       <p
                         key={event.id}
@@ -295,7 +501,7 @@ export function CalendarPlanner({
                     ))}
                     {dayEvents.length > 2 ? <p className="text-[10px] text-slate-400">+{dayEvents.length - 2}</p> : null}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -362,131 +568,139 @@ export function CalendarPlanner({
         </article>
       </section>
 
-      {/* Barnehage uke-planner */}
-      <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
-        <h2 className="flex items-center gap-2 text-base font-bold">
-          <School className="h-4 w-4 text-primary" />
-          Barnehageuker
-        </h2>
-        <p className="mt-1 text-sm text-slate-600">Sett hvem som leverer (L) og henter (H) – vises direkte i kalenderen.</p>
-
-        {/* Fargeforklaring per person */}
-        {members.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {members.map((member, index) => {
-              const color = MEMBER_COLORS[index % MEMBER_COLORS.length];
-              return (
-                <span key={member.profileId} className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${color.bg} ${color.text}`}>
-                  {member.displayName.split(" ")[0]}
-                </span>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Ukenavigering */}
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setWeekStart((current) => shiftWeek(current, -1))}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-slate-700"
-            aria-label="Forrige uke"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="text-sm font-medium text-slate-700">Uke fra {weekLabel}</span>
-          <button
-            type="button"
-            onClick={() => setWeekStart((current) => shiftWeek(current, 1))}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-slate-700"
-            aria-label="Neste uke"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-
-        {members.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">Ingen husholdningsmedlemmer funnet.</p>
-        ) : (
-          <form
-            key={weekStart}
-            className="mt-4"
-            action={(formData) => {
-              startTransition(async () => {
-                await saveChildcareWeekAction(formData);
-                router.refresh();
-              });
-            }}
-          >
-            <input type="hidden" name="weekStart" value={weekStart} />
-
-            <div className="grid grid-cols-5 gap-2">
-              {weekDayDates.map((dateStr, dayIndex) => {
-                const existing = childcareByDay.get(dateStr);
-                const dayNames = ["Man", "Tir", "Ons", "Tor", "Fre"];
-                const dayNum = Number(dateStr.split("-")[2]);
-
-                return (
-                  <div key={dateStr} className="rounded-xl border border-slate-200 p-2">
-                    <p className="text-center text-[11px] font-bold text-slate-700">
-                      {dayNames[dayIndex]}
-                      <span className="ml-1 font-normal text-slate-400">{dayNum}.</span>
-                    </p>
-
-                    <div className="mt-2 space-y-1.5">
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase text-slate-400">L</p>
-                        <select
-                          name="dropoff"
-                          defaultValue={
-                            existing?.dropoff ? `${dayIndex}:${existing.dropoff.assignedPersonId}` : ""
-                          }
-                          className="mt-0.5 w-full rounded-md border border-slate-200 py-1 pl-1 text-[11px]"
-                        >
-                          <option value="">–</option>
-                          {members.map((member) => (
-                            <option key={member.profileId} value={`${dayIndex}:${member.profileId}`}>
-                              {member.displayName.split(" ")[0]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase text-slate-400">H</p>
-                        <select
-                          name="pickup"
-                          defaultValue={
-                            existing?.pickup ? `${dayIndex}:${existing.pickup.assignedPersonId}` : ""
-                          }
-                          className="mt-0.5 w-full rounded-md border border-slate-200 py-1 pl-1 text-[11px]"
-                        >
-                          <option value="">–</option>
-                          {members.map((member) => (
-                            <option key={member.profileId} value={`${dayIndex}:${member.profileId}`}>
-                              {member.displayName.split(" ")[0]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-4">
+      {selectedDay ? (
+        <section className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl ring-1 ring-black/10">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">Dagdetaljer</p>
+                <h2 className="mt-1 text-xl font-bold capitalize">{selectedDayLabel}</h2>
+                <p className="mt-1 text-sm text-slate-600">Legg inn barnehage og middag for denne dagen.</p>
+              </div>
               <button
-                type="submit"
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white"
-                disabled={pending}
+                type="button"
+                onClick={() => setSelectedDay(null)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-300 text-slate-700"
+                aria-label="Lukk"
               >
-                {pending ? "Lagrer..." : "Lagre uke"}
+                <X className="h-4 w-4" />
               </button>
             </div>
-          </form>
-        )}
-      </section>
+
+            <form
+              key={selectedDay}
+              className="mt-4 grid gap-3 md:grid-cols-2"
+              action={(formData) => {
+                startTransition(async () => {
+                  await saveCalendarDayDetailsAction(formData);
+                  setSelectedDay(null);
+                  router.refresh();
+                });
+              }}
+            >
+              <input type="hidden" name="date" value={selectedDay} />
+
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700">Levering (barnehage)</span>
+                <select
+                  name="dropoffProfileId"
+                  defaultValue={selectedDayChildcare.dropoff?.assignedPersonId ?? ""}
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3"
+                >
+                  <option value="">Ingen</option>
+                  {members.map((member) => (
+                    <option key={member.profileId} value={member.profileId}>
+                      {member.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm">
+                <span className="font-medium text-slate-700">Henting (barnehage)</span>
+                <select
+                  name="pickupProfileId"
+                  defaultValue={selectedDayChildcare.pickup?.assignedPersonId ?? ""}
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3"
+                >
+                  <option value="">Ingen</option>
+                  {members.map((member) => (
+                    <option key={member.profileId} value={member.profileId}>
+                      {member.displayName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-1 text-sm md:col-span-2">
+                <span className="font-medium text-slate-700">Middag</span>
+                <input
+                  name="dinnerTitle"
+                  defaultValue={selectedDayMeal?.title ?? ""}
+                  placeholder="F.eks. Pasta med kylling"
+                  className="h-10 w-full rounded-lg border border-slate-300 px-3"
+                />
+              </label>
+
+              <label className="space-y-1 text-sm md:col-span-2">
+                <span className="font-medium text-slate-700">Middagsnotat</span>
+                <textarea
+                  name="dinnerNote"
+                  defaultValue={selectedDayMeal?.note ?? ""}
+                  rows={2}
+                  placeholder="Allergi, prep, hvem handler..."
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2"
+                />
+              </label>
+
+              <div className="md:col-span-2 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDay(null)}
+                  className="inline-flex h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700"
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex h-10 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-white"
+                  disabled={pending}
+                >
+                  {pending ? "Lagrer..." : "Lagre dag"}
+                </button>
+              </div>
+            </form>
+
+            <div className="mt-4 rounded-xl border border-slate-200 p-3">
+              <p className="text-sm font-semibold text-slate-700">Avtaler denne dagen</p>
+              <div className="mt-2 space-y-2">
+                {selectedDayEvents.length === 0 ? (
+                  <p className="text-sm text-slate-500">Ingen avtaler denne dagen.</p>
+                ) : (
+                  selectedDayEvents.map((event) => (
+                    <div key={event.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{event.title}</p>
+                        <p className="text-xs text-slate-500">
+                          {event.allDay ? "Hele dagen" : formatDateTime(event.startsAt, false).split(" ").at(-1)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => archiveEvent(event.id)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-slate-600"
+                        aria-label={`Slett ${event.title}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <h2 className="text-lg font-bold">Ny avtale</h2>

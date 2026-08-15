@@ -5,11 +5,6 @@ import { getCurrentMembership } from "@/features/household/queries";
 
 const modules = [
   {
-    href: "/children" as Route,
-    title: "Barn",
-    description: "Profiler, mål, notater, milepæler og sitater."
-  },
-  {
     href: "/shopping" as Route,
     title: "Handleliste",
     description: "Kategorier og varer for ukens innkjøp."
@@ -18,16 +13,6 @@ const modules = [
     href: "/calendar" as Route,
     title: "Kalender",
     description: "Avtaler, aktiviteter og familiens plan."
-  },
-  {
-    href: "/childcare" as Route,
-    title: "Barnehage",
-    description: "Levering, henting og ansvar per dag."
-  },
-  {
-    href: "/meals" as Route,
-    title: "Middag",
-    description: "Måltidsplan for dag og uke."
   },
   {
     href: "/recipes" as Route,
@@ -40,9 +25,9 @@ const modules = [
     description: "Plassholder for kommende økonomi-modul."
   },
   {
-    href: "/household" as Route,
-    title: "Household",
-    description: "Administrer household og medlemskap."
+    href: "/children" as Route,
+    title: "Barn",
+    description: "Profiler, mål, notater, milepæler og sitater."
   }
 ];
 
@@ -59,7 +44,7 @@ export default async function DashboardPage() {
         <p className="text-sm font-semibold uppercase tracking-wide text-primary">I dag</p>
         <h1 className="mt-2 text-3xl font-bold">Hei, {membership.householdName}</h1>
         <p className="mt-3 text-base text-slate-700">
-          Velg hva du vil utforske videre. Alle hovedmoduler er nå tilgjengelige som egne sider.
+          Velg hva du vil utforske videre. Barnehage og middag planlegges nå direkte inne i kalender per dag.
         </p>
         <p className="mt-2 text-sm text-slate-600">Din rolle: {membership.role}</p>
       </section>
