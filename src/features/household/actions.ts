@@ -5,6 +5,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getCurrentMembership, getCurrentProfileId } from "@/features/household/queries";
 
 export type HouseholdFormState = {
   error?: string;
@@ -141,33 +142,25 @@ export async function createInviteAction(_: InviteFormState, _formData: FormData
     return { error: "Ikke innlogget." };
   }
 
-  const adminSupabase = createAdminSupabaseClient();
+  const profileId = await getCurrentProfileId(user.id);
 
-  const { data: profile } = await adminSupabase
-    .from("profiles")
-    .select("id")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-
-  if (!profile) {
+  if (!profileId) {
     return { error: "Profil ikke funnet." };
   }
 
-  const { data: membership } = await adminSupabase
-    .from("household_members")
-    .select("household_id, role")
-    .eq("user_id", profile.id)
-    .maybeSingle();
+  const membership = await getCurrentMembership(user.id);
 
   if (!membership || membership.role !== "owner") {
     return { error: "Kun husholdningseier kan invitere." };
   }
 
+  const adminSupabase = createAdminSupabaseClient();
+
   const { data: invite, error } = await adminSupabase
     .from("household_invitations")
     .insert({
-      household_id: membership.household_id,
-      invited_by: profile.id
+      household_id: membership.householdId,
+      invited_by: profileId
     })
     .select("token")
     .single();
