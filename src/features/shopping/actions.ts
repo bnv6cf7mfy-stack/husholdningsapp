@@ -70,12 +70,24 @@ export async function addShoppingItemAction(formData: FormData) {
 
   const adminSupabase = createAdminSupabaseClient();
 
-  await adminSupabase.from("shopping_items").insert({
+  const { error } = await adminSupabase.from("shopping_items").insert({
     household_id: context.householdId,
     name: parsed.data.name,
     category_id: parsed.data.categoryId,
     created_by: context.profileId
   });
+
+  if (!error) {
+    await adminSupabase.from("notification_events").insert({
+      household_id: context.householdId,
+      actor_profile_id: context.profileId,
+      event_type: "shopping_item_added",
+      payload: {
+        itemName: parsed.data.name,
+        categoryId: parsed.data.categoryId
+      }
+    });
+  }
 
   revalidatePath("/shopping");
 }

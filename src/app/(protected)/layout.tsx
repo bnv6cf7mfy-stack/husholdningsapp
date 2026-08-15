@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/features/auth/actions";
+import { PushNotificationToggle } from "@/features/notifications/components/push-notification-toggle";
 
 type NavigationItem = {
   href: Route;
@@ -70,11 +71,14 @@ export default async function ProtectedLayout({ children }: { children: React.Re
               );
             })}
           </div>
-          <form action={signOutAction}>
-            <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-              Logg ut
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            <PushNotificationToggle />
+            <form action={signOutAction}>
+              <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                Logg ut
+              </button>
+            </form>
+          </div>
         </div>
       </header>
       {children}
