@@ -6,6 +6,7 @@ import { signOutAction } from "@/features/auth/actions";
 
 const navigationItems = [
   { href: "/dashboard" as Route, label: "Dashboard" },
+  { href: "/household" as Route, label: "Husholdning" },
   { href: "/shopping" as Route, label: "Handleliste" },
   { href: "/calendar" as Route, label: "Kalender" },
   { href: "/recipes" as Route, label: "Oppskrifter" },
