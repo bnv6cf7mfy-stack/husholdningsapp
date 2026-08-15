@@ -8,8 +8,11 @@ import type {
   ChildcareAssignment,
   DailyMealPlan,
   HouseholdMember,
+  TodayPartnerMessage,
   TomorrowWeather
 } from "@/features/calendar/types";
+
+const TODAY_MESSAGE_LOCATION = "__today_message__";
 
 export type CalendarData = {
   householdName: string;
@@ -20,6 +23,7 @@ export type CalendarData = {
   members: HouseholdMember[];
   childcareAssignments: ChildcareAssignment[];
   dailyMealPlans: DailyMealPlan[];
+  todayMessage: TodayPartnerMessage | null;
   tomorrowWeather: TomorrowWeather;
 };
 
@@ -130,8 +134,10 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
     });
   }
 
+  const standardEventRows = (eventRows ?? []).filter((row) => row.location !== TODAY_MESSAGE_LOCATION);
+
   const events: CalendarEvent[] =
-    eventRows?.map((row) => ({
+    standardEventRows.map((row) => ({
       id: row.id,
       title: row.title,
       description: row.description,
@@ -142,7 +148,7 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
       eventType: row.event_type,
       createdByName: creatorMap.get(row.created_by) ?? "Ukjent",
       children: eventChildrenMap.get(row.id) ?? []
-    })) ?? [];
+    }));
 
   // Household members for color assignment
   const { data: memberRows } = await adminSupabase
@@ -232,6 +238,35 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
   });
 
   const dailyMealPlans = Array.from(mealByDate.values());
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  const { data: todayMessageRow } = await adminSupabase
+    .from("calendar_events")
+    .select("description, updated_at, created_by")
+    .eq("household_id", membership.householdId)
+    .eq("location", TODAY_MESSAGE_LOCATION)
+    .is("archived_at", null)
+    .gte("starts_at", todayStart.toISOString())
+    .lte("starts_at", todayEnd.toISOString())
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let todayMessage: TodayPartnerMessage | null = null;
+
+  if (todayMessageRow?.description?.trim()) {
+    const createdByName = creatorMap.get(todayMessageRow.created_by) ?? personNameMap.get(todayMessageRow.created_by) ?? "Ukjent";
+
+    todayMessage = {
+      text: todayMessageRow.description,
+      updatedAt: todayMessageRow.updated_at,
+      updatedByName: createdByName
+    };
+  }
+
   const tomorrowWeather = await getTomorrowWeatherSummary();
 
   return {
@@ -243,6 +278,7 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
     members,
     childcareAssignments,
     dailyMealPlans,
+    todayMessage,
     tomorrowWeather
   };
 }

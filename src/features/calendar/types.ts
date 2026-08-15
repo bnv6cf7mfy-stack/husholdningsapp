@@ -48,6 +48,12 @@ export type DailyMealPlan = {
   note: string | null;
 };
 
+export type TodayPartnerMessage = {
+  text: string;
+  updatedAt: string;
+  updatedByName: string;
+};
+
 export type TomorrowWeather = {
   source: "yr";
   tomorrowDate: string; // YYYY-MM-DD in Europe/Oslo

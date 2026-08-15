@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { Route } from "next";
 import {
@@ -21,7 +21,8 @@ import {
 import {
   archiveCalendarEventAction,
   createCalendarEventAction,
-  saveCalendarDayDetailsAction
+  saveCalendarDayDetailsAction,
+  saveTodayMessageAction
 } from "@/features/calendar/actions";
 import type {
   CalendarChild,
@@ -29,6 +30,7 @@ import type {
   ChildcareAssignment,
   DailyMealPlan,
   HouseholdMember,
+  TodayPartnerMessage,
   TomorrowWeather
 } from "@/features/calendar/types";
 import { calendarEventTypeLabels } from "@/features/calendar/types";
@@ -42,6 +44,7 @@ type CalendarPlannerProps = {
   members: HouseholdMember[];
   initialChildcareAssignments: ChildcareAssignment[];
   initialDailyMealPlans: DailyMealPlan[];
+  todayMessage: TodayPartnerMessage | null;
   tomorrowWeather: TomorrowWeather;
 };
 
@@ -159,10 +162,14 @@ export function CalendarPlanner({
   members,
   initialChildcareAssignments,
   initialDailyMealPlans,
+  todayMessage,
   tomorrowWeather
 }: CalendarPlannerProps) {
   const router = useRouter();
   const [events, setEvents] = useState(initialEvents);
+  const [messageDraft, setMessageDraft] = useState(todayMessage?.text ?? "");
+  const [lastSavedMessage, setLastSavedMessage] = useState(todayMessage?.text ?? "");
+  const [messageStatus, setMessageStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   // Map profileId -> color index for consistent per-person colors
   const memberColorMap = useMemo(() => {
@@ -196,7 +203,47 @@ export function CalendarPlanner({
   }, [initialDailyMealPlans]);
 
   const [pending, startTransition] = useTransition();
+  const [messagePending, startMessageTransition] = useTransition();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const persistTodayMessage = (nextMessage: string) => {
+    startMessageTransition(async () => {
+      setMessageStatus("saving");
+
+      try {
+        const formData = new FormData();
+        formData.set("message", nextMessage);
+
+        await saveTodayMessageAction(formData);
+        setLastSavedMessage(nextMessage);
+        setMessageStatus("saved");
+      } catch {
+        setMessageStatus("error");
+      }
+    });
+  };
+
+  useEffect(() => {
+    const normalizedDraft = messageDraft.trim();
+    const normalizedSaved = lastSavedMessage.trim();
+
+    if (normalizedDraft === normalizedSaved) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      persistTodayMessage(messageDraft);
+    }, 800);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [messageDraft, lastSavedMessage]);
+
+  useEffect(() => {
+    setMessageDraft(todayMessage?.text ?? "");
+    setLastSavedMessage(todayMessage?.text ?? "");
+  }, [todayMessage?.text]);
 
   const monthDate = useMemo(() => parseMonthKey(month), [month]);
 
@@ -366,6 +413,61 @@ export function CalendarPlanner({
             )}
           </article>
         </div>
+
+        <article className="mt-3 rounded-xl border border-slate-200 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-800">Beskjed i dag</h2>
+            {todayMessage ? (
+              <p className="text-xs text-slate-500">
+                Sist oppdatert av {todayMessage.updatedByName} · {formatDateTime(todayMessage.updatedAt, false)}
+              </p>
+            ) : null}
+          </div>
+
+          <form
+            className="mt-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              persistTodayMessage(messageDraft);
+            }}
+          >
+            <textarea
+              name="message"
+              maxLength={600}
+              value={messageDraft}
+              onChange={(event) => {
+                setMessageDraft(event.target.value);
+                if (messageStatus !== "saving") {
+                  setMessageStatus("idle");
+                }
+              }}
+              placeholder="Skriv en kort beskjed til partner for i dag..."
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              rows={3}
+            />
+            <div className="mt-2 flex items-center justify-between gap-2">
+              <div className="space-y-0.5">
+                <p className="text-xs text-slate-500">Tomt felt + lagre vil fjerne dagens beskjed.</p>
+                {messageStatus === "saving" || messagePending ? (
+                  <p className="text-xs font-medium text-slate-500">Lagrer automatisk...</p>
+                ) : null}
+                {messageStatus === "saved" && !messagePending ? (
+                  <p className="text-xs font-medium text-emerald-700">Lagret</p>
+                ) : null}
+                {messageStatus === "error" ? (
+                  <p className="text-xs font-medium text-rose-700">Kunne ikke lagre. Prover igjen.</p>
+                ) : null}
+              </div>
+              <button
+                type="submit"
+                className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-white"
+                disabled={messagePending}
+              >
+                {messagePending ? "Lagrer..." : "Lagre beskjed"}
+              </button>
+            </div>
+          </form>
+        </article>
 
         <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-600">
           <div className="flex flex-wrap items-center gap-2">

@@ -16,6 +16,8 @@ const calendarEventTypeValues = Object.keys(calendarEventTypeLabels) as [
   "other"
 ];
 
+const TODAY_MESSAGE_LOCATION = "__today_message__";
+
 const createCalendarEventSchema = z
   .object({
     title: z.string().trim().min(1).max(240),
@@ -254,6 +256,59 @@ const saveCalendarDayDetailsSchema = z.object({
   dinnerTitle: z.string().trim().max(160).optional(),
   dinnerNote: z.string().trim().max(800).optional()
 });
+
+const saveTodayMessageSchema = z.object({
+  message: z.string().trim().max(600)
+});
+
+export async function saveTodayMessageAction(formData: FormData) {
+  const parsed = saveTodayMessageSchema.safeParse({
+    message: formData.get("message")
+  });
+
+  if (!parsed.success) {
+    revalidatePath("/calendar");
+    return;
+  }
+
+  const context = await resolveCalendarContext();
+
+  if (!context) {
+    revalidatePath("/calendar");
+    return;
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  await adminSupabase
+    .from("calendar_events")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("household_id", context.householdId)
+    .eq("location", TODAY_MESSAGE_LOCATION)
+    .is("archived_at", null)
+    .gte("starts_at", todayStart.toISOString())
+    .lte("starts_at", todayEnd.toISOString());
+
+  if (parsed.data.message) {
+    await adminSupabase.from("calendar_events").insert({
+      household_id: context.householdId,
+      title: "I dag-beskjed",
+      description: parsed.data.message,
+      starts_at: todayStart.toISOString(),
+      ends_at: todayEnd.toISOString(),
+      all_day: true,
+      event_type: "general",
+      location: TODAY_MESSAGE_LOCATION,
+      created_by: context.profileId
+    });
+  }
+
+  revalidatePath("/calendar");
+}
 
 export async function saveCalendarDayDetailsAction(formData: FormData) {
   const parsed = saveCalendarDayDetailsSchema.safeParse({
