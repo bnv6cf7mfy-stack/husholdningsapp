@@ -48,6 +48,13 @@ type CalendarPlannerProps = {
   tomorrowWeather: TomorrowWeather;
 };
 
+type SmartReminder = {
+  id: string;
+  severity: "high" | "medium";
+  text: string;
+  targetDateKey?: string;
+};
+
 // Deterministic color palette per household member (by join order)
 const MEMBER_COLORS = [
   { bg: "bg-sky-100",     text: "text-sky-800",     dot: "bg-sky-500"     },
@@ -105,6 +112,14 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
+function getNextWeekday(date: Date) {
+  let next = new Date(date);
+  while (next.getDay() === 0 || next.getDay() === 6) {
+    next = addDays(next, 1);
+  }
+  return next;
+}
+
 function getWeatherVisual(symbolCode?: string) {
   const code = (symbolCode ?? "").toLowerCase();
 
@@ -149,6 +164,23 @@ function getWeatherVisual(symbolCode?: string) {
   };
 }
 
+function getInitials(name?: string | null) {
+  if (!name) {
+    return "-";
+  }
+
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return "-";
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
+}
+
 function eventSort(a: CalendarEvent, b: CalendarEvent) {
   return new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
 }
@@ -170,6 +202,7 @@ export function CalendarPlanner({
   const [messageDraft, setMessageDraft] = useState(todayMessage?.text ?? "");
   const [lastSavedMessage, setLastSavedMessage] = useState(todayMessage?.text ?? "");
   const [messageStatus, setMessageStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [isEditingMessage, setIsEditingMessage] = useState(false);
 
   // Map profileId -> color index for consistent per-person colors
   const memberColorMap = useMemo(() => {
@@ -206,7 +239,7 @@ export function CalendarPlanner({
   const [messagePending, startMessageTransition] = useTransition();
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
-  const persistTodayMessage = (nextMessage: string) => {
+  const persistTodayMessage = (nextMessage: string, closeEditorOnSuccess?: boolean) => {
     startMessageTransition(async () => {
       setMessageStatus("saving");
 
@@ -217,28 +250,14 @@ export function CalendarPlanner({
         await saveTodayMessageAction(formData);
         setLastSavedMessage(nextMessage);
         setMessageStatus("saved");
+        if (closeEditorOnSuccess) {
+          setIsEditingMessage(false);
+        }
       } catch {
         setMessageStatus("error");
       }
     });
   };
-
-  useEffect(() => {
-    const normalizedDraft = messageDraft.trim();
-    const normalizedSaved = lastSavedMessage.trim();
-
-    if (normalizedDraft === normalizedSaved) {
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      persistTodayMessage(messageDraft);
-    }, 800);
-
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [messageDraft, lastSavedMessage]);
 
   useEffect(() => {
     setMessageDraft(todayMessage?.text ?? "");
@@ -308,11 +327,15 @@ export function CalendarPlanner({
   const today = new Date();
   const todayKey = toDateKey(today);
   const tomorrowKey = toDateKey(addDays(today, 1));
+  const nextWeekdayDate = getNextWeekday(addDays(today, 1));
+  const nextWeekdayKey = toDateKey(nextWeekdayDate);
+  const nextWeekdayLabel = new Intl.DateTimeFormat("nb-NO", { weekday: "short" }).format(nextWeekdayDate);
 
   const todaysEvents = eventsByDay.get(todayKey) ?? [];
   const todaysChildcare = childcareByDay.get(todayKey) ?? { dropoff: null, pickup: null };
   const todaysDinner = mealByDay.get(todayKey) ?? null;
   const tomorrowsChildcare = childcareByDay.get(tomorrowKey) ?? { dropoff: null, pickup: null };
+  const nextWeekdayChildcare = childcareByDay.get(nextWeekdayKey) ?? { dropoff: null, pickup: null };
 
   const hasTomorrowPickup = Boolean(tomorrowsChildcare.pickup?.assignedPersonName);
   const shouldShowRainwearReminder = tomorrowWeather.isRainExpected && hasTomorrowPickup;
@@ -336,6 +359,68 @@ export function CalendarPlanner({
             label: "Lite regnrisiko",
             style: "bg-emerald-100 text-emerald-800"
           };
+
+  const weatherReminderText = tomorrowWeather.error
+    ? "Vaerdata utilgjengelig akkurat na."
+    : shouldShowRainwearReminder
+      ? `Regn ca. ${tomorrowWeather.maxPrecipMm} mm. Henting: ${tomorrowsChildcare.pickup?.assignedPersonName ?? "Ikke satt"}. Husk regntoy.`
+      : tomorrowWeather.isRainExpected
+        ? `Regn ca. ${tomorrowWeather.maxPrecipMm} mm. Henting ikke satt.`
+        : `Lite regnrisiko. Henting: ${tomorrowsChildcare.pickup?.assignedPersonName ?? "Ikke satt"}.`;
+
+  const smartReminders = useMemo<SmartReminder[]>(() => {
+    const reminders: SmartReminder[] = [];
+
+    if (shouldShowRainwearReminder) {
+      reminders.push({
+        id: "rainwear",
+        severity: "high",
+        text: `Regn + henting i morgen (${tomorrowsChildcare.pickup?.assignedPersonName ?? "Ikke satt"}) - husk regntoy`,
+        targetDateKey: tomorrowKey
+      });
+    }
+
+    const isAfterThreePm = today.getHours() >= 15;
+    const hasDinnerPlan = Boolean(todaysDinner?.title?.trim());
+    if (isAfterThreePm && !hasDinnerPlan) {
+      reminders.push({
+        id: "dinner-missing",
+        severity: "medium",
+        text: "Kl. 15+ og ingen middag satt i dag",
+        targetDateKey: todayKey
+      });
+    }
+
+    const missingAssignments: string[] = [];
+    if (!nextWeekdayChildcare.dropoff?.assignedPersonId) {
+      missingAssignments.push("L");
+    }
+    if (!nextWeekdayChildcare.pickup?.assignedPersonId) {
+      missingAssignments.push("H");
+    }
+
+    if (missingAssignments.length > 0) {
+      reminders.push({
+        id: "next-weekday-childcare",
+        severity: "medium",
+        text: `${nextWeekdayLabel}: mangler ${missingAssignments.join("/")} i barnehage`,
+        targetDateKey: nextWeekdayKey
+      });
+    }
+
+    return reminders;
+  }, [
+    nextWeekdayKey,
+    nextWeekdayChildcare.dropoff?.assignedPersonId,
+    nextWeekdayChildcare.pickup?.assignedPersonId,
+    nextWeekdayLabel,
+    shouldShowRainwearReminder,
+    today,
+    todayKey,
+    todaysDinner?.title,
+    tomorrowKey,
+    tomorrowsChildcare.pickup?.assignedPersonName
+  ]);
 
   const goToMonth = (direction: -1 | 1) => {
     const nextDate = new Date(monthDate.getFullYear(), monthDate.getMonth() + direction, 1);
@@ -368,147 +453,194 @@ export function CalendarPlanner({
         </p>
       </section>
 
-      <section className="rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
+      <section className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-black/5 sm:p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary">Viktig i dag</p>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <article className="rounded-xl border border-slate-200 p-3">
-            <h2 className="text-sm font-bold text-slate-800">Dagens avtaler</h2>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {smartReminders.length === 0 ? (
+            <p className="text-xs text-slate-500">Ingen kritiske paminnelser akkurat na.</p>
+          ) : (
+            smartReminders.map((reminder) => (
+              <button
+                type="button"
+                key={reminder.id}
+                onClick={() => {
+                  if (reminder.targetDateKey) {
+                    setSelectedDay(reminder.targetDateKey);
+                  }
+                }}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  reminder.severity === "high"
+                    ? "bg-rose-100 text-rose-800"
+                    : "bg-amber-100 text-amber-800"
+                } ${reminder.targetDateKey ? "cursor-pointer" : "cursor-default"}`}
+                title={reminder.text}
+              >
+                <Clock3 className="h-3 w-3" />
+                <span className="max-w-[360px] truncate">{reminder.text}</span>
+              </button>
+            ))
+          )}
+        </div>
+        <div className="mt-2 grid gap-2 md:grid-cols-4">
+            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Dagens avtaler</h2>
             {todaysEvents.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-500">Ingen avtaler i dag.</p>
+              <p className="mt-1 text-sm text-slate-500">Ingen avtaler i dag.</p>
             ) : (
-              <ul className="mt-2 space-y-1.5">
-                {todaysEvents.slice(0, 4).map((event) => (
-                  <li key={event.id} className="text-sm text-slate-700">
-                    <span className="font-semibold">{event.allDay ? "Hele dagen" : formatDateTime(event.startsAt, false).split(" ").at(-1)}</span>{" "}
-                    {event.title}
-                  </li>
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {todaysEvents.slice(0, 2).map((event) => (
+                  <span
+                    key={event.id}
+                    className="inline-flex max-w-full items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
+                    title={event.title}
+                  >
+                    <span className="mr-1 font-semibold">{event.allDay ? "Hele dagen" : formatDateTime(event.startsAt, false).split(" ").at(-1)}</span>
+                    <span className="truncate">{event.title}</span>
+                  </span>
                 ))}
-              </ul>
-            )}
-          </article>
-
-          <article className="rounded-xl border border-slate-200 p-3">
-            <h2 className="text-sm font-bold text-slate-800">Barnehage i dag</h2>
-            <div className="mt-2 space-y-2 text-sm text-slate-700">
-              <p>
-                <span className="font-semibold">Levering:</span>{" "}
-                {todaysChildcare.dropoff?.assignedPersonName ?? "Ikke satt"}
-              </p>
-              <p>
-                <span className="font-semibold">Henting:</span>{" "}
-                {todaysChildcare.pickup?.assignedPersonName ?? "Ikke satt"}
-              </p>
-            </div>
-          </article>
-
-          <article className="rounded-xl border border-slate-200 p-3">
-            <h2 className="text-sm font-bold text-slate-800">Middag i dag</h2>
-            {todaysDinner ? (
-              <div className="mt-2 space-y-1">
-                <p className="text-sm font-semibold text-slate-700">{todaysDinner.title || "Middag"}</p>
-                {todaysDinner.note ? <p className="text-sm text-slate-600">{todaysDinner.note}</p> : null}
+                {todaysEvents.length > 2 ? (
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-700">+{todaysEvents.length - 2} flere</span>
+                ) : null}
               </div>
-            ) : (
-              <p className="mt-2 text-sm text-slate-500">Ikke planlagt enda.</p>
             )}
-          </article>
+            </article>
+
+            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">BHG</h2>
+              <div className="mt-1 flex items-center gap-3">
+                {[
+                  { key: "L", assignment: todaysChildcare.dropoff },
+                  { key: "H", assignment: todaysChildcare.pickup }
+                ].map(({ key, assignment }) => {
+                  const color = assignment ? memberColorMap.get(assignment.assignedPersonId) : undefined;
+                  return (
+                    <div key={key} className="flex items-center gap-1" title={assignment?.assignedPersonName ?? "Ikke satt"}>
+                      <span className="text-[11px] font-semibold text-slate-500">{key}</span>
+                      <span
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${
+                          color ? `${color.bg} ${color.text}` : "bg-slate-100 text-slate-400"
+                        }`}
+                      >
+                        {getInitials(assignment?.assignedPersonName)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-1 truncate text-[11px] text-slate-500">L = levering, H = henting</p>
+            </article>
+
+            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Middag i dag</h2>
+              {todaysDinner ? (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{todaysDinner.title || "Middag"}</span>
+                  {todaysDinner.note ? <span className="max-w-full truncate text-xs text-slate-600">{todaysDinner.note}</span> : null}
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">Ikke planlagt enda.</p>
+              )}
+            </article>
+
+            <article className="min-w-0 rounded-lg border border-slate-200 px-2.5 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-bold text-slate-800">Beskjed i dag</h2>
+              </div>
+
+              {!isEditingMessage ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingMessage(true);
+                    setMessageStatus("idle");
+                  }}
+                  className="mt-1.5 h-12 w-full rounded-md bg-slate-50 px-2 text-left text-sm text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-100"
+                  title="Trykk for å redigere dagens beskjed"
+                >
+                  <span className="line-clamp-2 block">
+                    {lastSavedMessage.trim() || "Trykk her for å legge inn beskjed"}
+                  </span>
+                </button>
+              ) : (
+                <form
+                  className="mt-1.5"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    persistTodayMessage(messageDraft, true);
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <textarea
+                      name="message"
+                      maxLength={600}
+                      value={messageDraft}
+                      onChange={(event) => {
+                        setMessageDraft(event.target.value);
+                        if (messageStatus !== "saving") {
+                          setMessageStatus("idle");
+                        }
+                      }}
+                      placeholder="Skriv en kort beskjed til partner for i dag..."
+                      className="h-8 min-h-8 min-w-0 flex-1 resize-none rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                      rows={1}
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-xs font-semibold text-white"
+                      disabled={messagePending}
+                    >
+                      {messagePending ? "Lagrer..." : "Lagre"}
+                    </button>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center rounded-lg border border-slate-300 px-2 text-xs font-semibold text-slate-700"
+                      onClick={() => {
+                        setMessageDraft(lastSavedMessage);
+                        setMessageStatus("idle");
+                        setIsEditingMessage(false);
+                      }}
+                      disabled={messagePending}
+                    >
+                      Avbryt
+                    </button>
+                  </div>
+                  <div className="mt-1 flex items-center justify-end gap-2 text-[11px]">
+                    {messageStatus === "saving" || messagePending ? (
+                      <p className="shrink-0 font-medium text-slate-500">Lagrer...</p>
+                    ) : null}
+                    {messageStatus === "saved" && !messagePending ? (
+                      <p className="shrink-0 font-medium text-emerald-700">Lagret</p>
+                    ) : null}
+                    {messageStatus === "error" ? (
+                      <p className="shrink-0 font-medium text-rose-700">Feil ved lagring</p>
+                    ) : null}
+                  </div>
+                </form>
+              )}
+            </article>
         </div>
 
-        <article className="mt-3 rounded-xl border border-slate-200 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-sm font-bold text-slate-800">Beskjed i dag</h2>
-            {todayMessage ? (
-              <p className="text-xs text-slate-500">
-                Sist oppdatert av {todayMessage.updatedByName} · {formatDateTime(todayMessage.updatedAt, false)}
-              </p>
-            ) : null}
-          </div>
-
-          <form
-            className="mt-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              persistTodayMessage(messageDraft);
-            }}
-          >
-            <textarea
-              name="message"
-              maxLength={600}
-              value={messageDraft}
-              onChange={(event) => {
-                setMessageDraft(event.target.value);
-                if (messageStatus !== "saving") {
-                  setMessageStatus("idle");
-                }
-              }}
-              placeholder="Skriv en kort beskjed til partner for i dag..."
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              rows={3}
-            />
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <div className="space-y-0.5">
-                <p className="text-xs text-slate-500">Tomt felt + lagre vil fjerne dagens beskjed.</p>
-                {messageStatus === "saving" || messagePending ? (
-                  <p className="text-xs font-medium text-slate-500">Lagrer automatisk...</p>
-                ) : null}
-                {messageStatus === "saved" && !messagePending ? (
-                  <p className="text-xs font-medium text-emerald-700">Lagret</p>
-                ) : null}
-                {messageStatus === "error" ? (
-                  <p className="text-xs font-medium text-rose-700">Kunne ikke lagre. Prover igjen.</p>
-                ) : null}
-              </div>
-              <button
-                type="submit"
-                className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-white"
-                disabled={messagePending}
-              >
-                {messagePending ? "Lagrer..." : "Lagre beskjed"}
-              </button>
-            </div>
-          </form>
-        </article>
-
-        <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-600">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="mt-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <p className="font-semibold text-slate-700">I morgen (Yr)</p>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${weatherStatus.style}`}>
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${weatherStatus.style}`}>
               {weatherStatus.label}
             </span>
+            {!tomorrowWeather.error ? (
+              <span className="inline-flex items-center gap-1 text-slate-700">
+                <weatherVisual.Icon className="h-3.5 w-3.5" />
+                <span>
+                  {weatherVisual.text}
+                  {typeof tomorrowWeather.minTempC === "number" && typeof tomorrowWeather.maxTempC === "number"
+                    ? ` ${tomorrowWeather.minTempC}°-${tomorrowWeather.maxTempC}°`
+                    : ""}
+                </span>
+              </span>
+            ) : null}
+            <p className="min-w-0 flex-1 truncate">{weatherReminderText}</p>
+            <p className="hidden shrink-0 text-[11px] text-slate-500 lg:block">Yr · {tomorrowWeather.locationLabel}</p>
           </div>
-
-          {!tomorrowWeather.error ? (
-            <div className="mt-2 flex items-center gap-2 text-slate-700">
-              <weatherVisual.Icon className="h-4 w-4" />
-              <p className="text-sm">
-                {weatherVisual.text}
-                {typeof tomorrowWeather.minTempC === "number" && typeof tomorrowWeather.maxTempC === "number"
-                  ? ` · ${tomorrowWeather.minTempC}° til ${tomorrowWeather.maxTempC}°`
-                  : ""}
-              </p>
-            </div>
-          ) : null}
-
-          {tomorrowWeather.error ? (
-            <p className="mt-1">Klarte ikke hente vaerdata akkurat na. Prover igjen automatisk senere.</p>
-          ) : shouldShowRainwearReminder ? (
-            <p className="mt-1">
-              Regn er meldt i morgen (ca. {tomorrowWeather.maxPrecipMm} mm). Planlagt henting:{" "}
-              <span className="font-medium">{tomorrowsChildcare.pickup?.assignedPersonName ?? "Ikke satt"}</span>.
-              Husk regntoy hjem fra barnehage.
-            </p>
-          ) : tomorrowWeather.isRainExpected ? (
-            <p className="mt-1">
-              Regn er meldt i morgen (ca. {tomorrowWeather.maxPrecipMm} mm), men ingen henting er satt enda.
-              Sett henting i kalenderdagen for i morgen for a fa mer konkret paminnelse.
-            </p>
-          ) : (
-            <p className="mt-1">
-              Ingen tydelig regnindikasjon i morgen. Planlagt henting:{" "}
-              <span className="font-medium">{tomorrowsChildcare.pickup?.assignedPersonName ?? "Ikke satt"}</span>.
-            </p>
-          )}
-          <p className="mt-1 text-xs text-slate-500">Datakilde: Yr ({tomorrowWeather.locationLabel})</p>
         </div>
       </section>
 
