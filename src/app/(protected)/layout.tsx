@@ -15,11 +15,12 @@ type NavigationItem = {
 const navigationItems = [
   { href: "/dashboard" as Route, label: "Dashboard" },
   { href: "/shopping" as Route, label: "Handleliste" },
+  { href: "/messages" as Route, label: "Meldinger" },
   { href: "/calendar" as Route, label: "Kalender" },
   { href: "/recipes" as Route, label: "Oppskrifter" },
-  { href: "/development" as Route, label: "Utvikling" },
+  { href: "/development" as Route, label: "Utvikling", enabled: false, badge: "Under utvikling" },
   { href: "/finance" as Route, label: "Økonomi", enabled: false, badge: "Kommer snart" },
-  { href: "/children" as Route, label: "Barn" },
+  { href: "/children" as Route, label: "Barn", enabled: false, badge: "Under utvikling" },
   { href: "/household" as Route, label: "Husholdning" }
 ] satisfies NavigationItem[];
 

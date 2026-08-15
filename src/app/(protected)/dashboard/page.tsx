@@ -11,6 +11,11 @@ const quickActions = [
     description: "Legg til og kryss av varer raskt."
   },
   {
+    href: "/messages" as Route,
+    title: "Meldinger",
+    description: "Send beskjeder til husholdningen."
+  },
+  {
     href: "/calendar" as Route,
     title: "Kalender",
     description: "Planlegg dagen med familieaktiviteter."
@@ -26,16 +31,6 @@ const upcomingModules = [
   {
     title: "Økonomi",
     description: "Kommer snart"
-  },
-  {
-    href: "/development" as Route,
-    title: "Utvikling",
-    description: "Brukes til produktforslag og prioritering"
-  },
-  {
-    href: "/children" as Route,
-    title: "Barn",
-    description: "Profiler og notater"
   }
 ];
 
