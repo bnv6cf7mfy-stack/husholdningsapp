@@ -85,19 +85,19 @@ export async function completeShoppingItemAction(formData: FormData) {
 
   if (!itemId) {
     revalidatePath("/shopping");
-    return;
+    return { ok: false };
   }
 
   const context = await resolveShoppingContext();
 
   if (!context) {
     revalidatePath("/shopping");
-    return;
+    return { ok: false };
   }
 
   const adminSupabase = createAdminSupabaseClient();
 
-  await adminSupabase
+  const { error } = await adminSupabase
     .from("shopping_items")
     .update({
       completed: true,
@@ -109,6 +109,8 @@ export async function completeShoppingItemAction(formData: FormData) {
     .is("archived_at", null);
 
   revalidatePath("/shopping");
+
+  return { ok: !error };
 }
 
 export async function uncompleteShoppingItemAction(formData: FormData) {
@@ -116,19 +118,19 @@ export async function uncompleteShoppingItemAction(formData: FormData) {
 
   if (!itemId) {
     revalidatePath("/shopping");
-    return;
+    return { ok: false };
   }
 
   const context = await resolveShoppingContext();
 
   if (!context) {
     revalidatePath("/shopping");
-    return;
+    return { ok: false };
   }
 
   const adminSupabase = createAdminSupabaseClient();
 
-  await adminSupabase
+  const { error } = await adminSupabase
     .from("shopping_items")
     .update({
       completed: false,
@@ -140,4 +142,6 @@ export async function uncompleteShoppingItemAction(formData: FormData) {
     .is("archived_at", null);
 
   revalidatePath("/shopping");
+
+  return { ok: !error };
 }

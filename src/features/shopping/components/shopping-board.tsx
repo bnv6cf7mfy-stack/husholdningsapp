@@ -39,7 +39,22 @@ type ShoppingBoardProps = {
 export function ShoppingBoard({ categories, initialItems, currentUserName }: ShoppingBoardProps) {
   const router = useRouter();
   const [items, setItems] = useState<ShoppingItem[]>(initialItems);
+  const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
+
+  const setItemPending = (itemId: string, isPending: boolean) => {
+    setPendingItemIds((previous) => {
+      const next = new Set(previous);
+
+      if (isPending) {
+        next.add(itemId);
+      } else {
+        next.delete(itemId);
+      }
+
+      return next;
+    });
+  };
 
   const openItemsByCategory = useMemo(() => {
     const map = new Map<string, ShoppingItem[]>();
@@ -86,6 +101,10 @@ export function ShoppingBoard({ categories, initialItems, currentUserName }: Sho
   };
 
   const completeItem = (itemId: string) => {
+    if (pendingItemIds.has(itemId)) {
+      return;
+    }
+
     const nowIso = new Date().toISOString();
 
     setItems((previous) =>
@@ -100,16 +119,29 @@ export function ShoppingBoard({ categories, initialItems, currentUserName }: Sho
       )
     );
 
+    setItemPending(itemId, true);
+
     startTransition(async () => {
       const formData = new FormData();
       formData.set("itemId", itemId);
 
-      await completeShoppingItemAction(formData);
-      router.refresh();
+      try {
+        const result = await completeShoppingItemAction(formData);
+
+        if (!result.ok) {
+          router.refresh();
+        }
+      } finally {
+        setItemPending(itemId, false);
+      }
     });
   };
 
   const uncompleteItem = (itemId: string) => {
+    if (pendingItemIds.has(itemId)) {
+      return;
+    }
+
     setItems((previous) =>
       previous.map((item) =>
         item.id === itemId
@@ -121,12 +153,21 @@ export function ShoppingBoard({ categories, initialItems, currentUserName }: Sho
       )
     );
 
+    setItemPending(itemId, true);
+
     startTransition(async () => {
       const formData = new FormData();
       formData.set("itemId", itemId);
 
-      await uncompleteShoppingItemAction(formData);
-      router.refresh();
+      try {
+        const result = await uncompleteShoppingItemAction(formData);
+
+        if (!result.ok) {
+          router.refresh();
+        }
+      } finally {
+        setItemPending(itemId, false);
+      }
     });
   };
 
@@ -175,10 +216,11 @@ export function ShoppingBoard({ categories, initialItems, currentUserName }: Sho
                 categoryItems.map((item) => (
                   <div key={item.id} className="flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3">
                     <button
+                      type="button"
                       aria-label={`Marker ${item.name} som kjøpt`}
-                      className="inline-block h-5 w-5 rounded-full border border-slate-400 transition hover:bg-emerald-50"
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-400 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={() => completeItem(item.id)}
-                      disabled={pending}
+                      disabled={pendingItemIds.has(item.id)}
                     >
                       <span className="sr-only">Kjøpt</span>
                     </button>
@@ -214,10 +256,11 @@ export function ShoppingBoard({ categories, initialItems, currentUserName }: Sho
                     <p className="text-[11px] text-slate-400">{formatCreatedAt(item.createdAt)}</p>
                   </div>
                   <button
+                    type="button"
                     aria-label={`Angre kjøpt for ${item.name}`}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:bg-slate-100"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => uncompleteItem(item.id)}
-                    disabled={pending}
+                    disabled={pendingItemIds.has(item.id)}
                   >
                     <Undo2 className="h-4 w-4" />
                   </button>
