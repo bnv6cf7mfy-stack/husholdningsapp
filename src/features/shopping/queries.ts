@@ -25,6 +25,7 @@ export type ShoppingItem = {
 };
 
 export type ShoppingData = {
+  householdId: string;
   householdName: string;
   currentUserName: string;
   categories: ShoppingCategory[];
@@ -90,6 +91,7 @@ export async function getShoppingData(): Promise<ShoppingData | null> {
   }
 
   return {
+    householdId: membership.householdId,
     householdName: membership.householdName,
     currentUserName,
     categories:

@@ -18,6 +18,7 @@ export default async function ShoppingPage() {
       </section>
 
       <ShoppingBoard
+        householdId={data.householdId}
         categories={data.categories}
         initialItems={data.items}
         currentUserName={data.currentUserName}

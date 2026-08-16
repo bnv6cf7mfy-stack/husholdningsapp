@@ -64,7 +64,6 @@ export default async function ProtectedLayout({ children }: { children: React.Re
                 <Link
                   key={item.href}
                   href={item.href}
-                  prefetch={false}
                   className={`${baseClasses} text-slate-700 hover:bg-slate-100`}
                 >
                   {item.label}

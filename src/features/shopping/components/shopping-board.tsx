@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Apple, Beef, Milk, Store, Undo2 } from "lucide-react";
 import type { ComponentType } from "react";
+import { createBrowserSupabaseClient } from "@/lib/supabase";
 import {
   addShoppingItemAction,
   completeShoppingItemAction,
@@ -31,16 +32,26 @@ const formatCreatedAt = (isoDate: string) => {
 };
 
 type ShoppingBoardProps = {
+  householdId: string;
   categories: ShoppingCategory[];
   initialItems: ShoppingItem[];
   currentUserName: string;
 };
 
-export function ShoppingBoard({ categories, initialItems, currentUserName }: ShoppingBoardProps) {
+type RealtimeShoppingRow = {
+  id: string;
+  name: string;
+  category_id: string | null;
+  completed: boolean;
+  created_at: string;
+};
+
+export function ShoppingBoard({ householdId, categories, initialItems, currentUserName }: ShoppingBoardProps) {
   const router = useRouter();
   const [items, setItems] = useState<ShoppingItem[]>(initialItems);
   const [pendingItemIds, setPendingItemIds] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setItemPending = (itemId: string, isPending: boolean) => {
     setPendingItemIds((previous) => {
@@ -70,6 +81,92 @@ export function ShoppingBoard({ categories, initialItems, currentUserName }: Sho
   }, [categories, items]);
 
   const completedItems = useMemo(() => items.filter((item) => item.completed), [items]);
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient();
+
+    const scheduleRefresh = () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+
+      refreshTimeoutRef.current = setTimeout(() => {
+        router.refresh();
+      }, 800);
+    };
+
+    const channel = supabase
+      .channel(`shopping-items-${householdId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "shopping_items",
+          filter: `household_id=eq.${householdId}`
+        },
+        (payload) => {
+          const row = payload.new as RealtimeShoppingRow;
+
+          setItems((previous) => {
+            if (previous.some((item) => item.id === row.id)) {
+              return previous;
+            }
+
+            return [
+              {
+                id: row.id,
+                name: row.name,
+                categoryId: row.category_id,
+                completed: row.completed,
+                createdByName: "Oppdateres...",
+                createdAt: row.created_at
+              },
+              ...previous
+            ];
+          });
+
+          scheduleRefresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "shopping_items",
+          filter: `household_id=eq.${householdId}`
+        },
+        (payload) => {
+          const row = payload.new as RealtimeShoppingRow;
+
+          setItems((previous) =>
+            previous.map((item) =>
+              item.id === row.id
+                ? {
+                    ...item,
+                    name: row.name,
+                    categoryId: row.category_id,
+                    completed: row.completed,
+                    createdAt: row.created_at
+                  }
+                : item
+            )
+          );
+
+          scheduleRefresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+
+      void supabase.removeChannel(channel);
+    };
+  }, [householdId, router]);
 
   const addItem = (categoryId: string, name: string) => {
     const trimmed = name.trim();
