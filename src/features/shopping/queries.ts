@@ -1,6 +1,5 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getCurrentMembership } from "@/features/household/queries";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 const fixedCategories = [
   "Frukt og grønt",
@@ -40,25 +39,7 @@ export async function getShoppingData(): Promise<ShoppingData | null> {
   }
 
   const adminSupabase = createAdminSupabaseClient();
-  const supabase = await createServerSupabaseClient();
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  let currentUserName = "deg";
-
-  if (user?.id) {
-    const { data: currentProfile } = await adminSupabase
-      .from("profiles")
-      .select("display_name")
-      .eq("auth_user_id", user.id)
-      .maybeSingle();
-
-    if (currentProfile?.display_name) {
-      currentUserName = currentProfile.display_name;
-    }
-  }
+  const currentUserName = "Deg";
 
   const { data: categories } = await adminSupabase
     .from("shopping_categories")

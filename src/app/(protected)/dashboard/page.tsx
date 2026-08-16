@@ -1,22 +1,36 @@
 import { redirect } from "next/navigation";
 import { getCurrentMembership } from "@/features/household/queries";
-import { getShoppingData } from "@/features/shopping/queries";
 import { getTodayWidgetData } from "@/features/calendar/today-widget-queries";
 import { TodayWidget } from "@/features/calendar/components/today-widget";
+import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export default async function DashboardPage() {
-  const [membership, shoppingData, todayData] = await Promise.all([
-    getCurrentMembership(),
-    getShoppingData(),
-    getTodayWidgetData()
-  ]);
+  const membership = await getCurrentMembership();
 
   if (!membership) {
     redirect("/onboarding");
   }
 
-  const openItems = shoppingData?.items.filter((item) => !item.completed).length ?? 0;
-  const completedItems = shoppingData?.items.filter((item) => item.completed).length ?? 0;
+  const adminSupabase = createAdminSupabaseClient();
+
+  const [openItemsResult, completedItemsResult, todayData] = await Promise.all([
+    adminSupabase
+      .from("shopping_items")
+      .select("id", { count: "exact", head: true })
+      .eq("household_id", membership.householdId)
+      .is("archived_at", null)
+      .eq("completed", false),
+    adminSupabase
+      .from("shopping_items")
+      .select("id", { count: "exact", head: true })
+      .eq("household_id", membership.householdId)
+      .is("archived_at", null)
+      .eq("completed", true),
+    getTodayWidgetData(membership)
+  ]);
+
+  const openItems = openItemsResult.count ?? 0;
+  const completedItems = completedItemsResult.count ?? 0;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-6 px-4 py-8 sm:px-6">

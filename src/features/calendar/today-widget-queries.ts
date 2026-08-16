@@ -1,6 +1,5 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getCurrentMembership } from "@/features/household/queries";
+import { getCurrentMembership, type CurrentMembership } from "@/features/household/queries";
 import { getTomorrowWeatherSummary } from "@/lib/weather/yr";
 import type {
   CalendarEvent,
@@ -31,22 +30,41 @@ export type TodayWidgetData = {
   members: HouseholdMember[];
 };
 
-export async function getTodayWidgetData(): Promise<TodayWidgetData | null> {
-  const membership = await getCurrentMembership();
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(fallback);
+      });
+  });
+}
+
+export async function getTodayWidgetData(membershipOverride?: CurrentMembership): Promise<TodayWidgetData | null> {
+  const membership = membershipOverride ?? (await getCurrentMembership());
   if (!membership) return null;
 
   const adminSupabase = createAdminSupabaseClient();
-  const supabase = await createServerSupabaseClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  void user;
 
   const now = new Date();
   const todayKey = toDateStr(now);
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
   const tomorrowKey = toDateStr(tomorrow);
+  const weatherFallback: TomorrowWeather = {
+    source: "yr",
+    tomorrowDate: tomorrowKey,
+    locationLabel: process.env.YR_LOCATION_LABEL ?? "Bekkestua",
+    isRainExpected: false,
+    maxPrecipMm: 0,
+    error: "Værdata utilgjengelig"
+  };
 
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
@@ -98,7 +116,7 @@ export async function getTodayWidgetData(): Promise<TodayWidgetData | null> {
         .select("user_id")
         .eq("household_id", membership.householdId)
         .order("joined_at", { ascending: true }),
-      getTomorrowWeatherSummary()
+      withTimeout(getTomorrowWeatherSummary(), 1200, weatherFallback)
     ]);
 
   const memberProfileIds = (membersResult.data ?? []).map((r) => r.user_id);

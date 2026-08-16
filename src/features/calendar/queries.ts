@@ -49,6 +49,22 @@ function parseMonth(monthInput?: string) {
   return { firstDay, lastDay, queryStart, queryEnd, key };
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(fallback);
+      });
+  });
+}
+
 export async function getCalendarData(monthInput?: string): Promise<CalendarData | null> {
   const membership = await getCurrentMembership();
 
@@ -303,7 +319,22 @@ export async function getCalendarData(monthInput?: string): Promise<CalendarData
     };
   }
 
-  const tomorrowWeather = await getTomorrowWeatherSummary();
+  const tomorrowKey = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return toDateStr(d);
+  })();
+
+  const weatherFallback: TomorrowWeather = {
+    source: "yr",
+    tomorrowDate: tomorrowKey,
+    locationLabel: process.env.YR_LOCATION_LABEL ?? "Bekkestua",
+    isRainExpected: false,
+    maxPrecipMm: 0,
+    error: "Værdata utilgjengelig"
+  };
+
+  const tomorrowWeather = await withTimeout(getTomorrowWeatherSummary(), 1200, weatherFallback);
 
   return {
     householdName: membership.householdName,
