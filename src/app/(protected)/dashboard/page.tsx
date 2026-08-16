@@ -1,40 +1,8 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import type { Route } from "next";
 import { getCurrentMembership } from "@/features/household/queries";
 import { getShoppingData } from "@/features/shopping/queries";
 import { getTodayWidgetData } from "@/features/calendar/today-widget-queries";
 import { TodayWidget } from "@/features/calendar/components/today-widget";
-
-const quickActions = [
-  {
-    href: "/shopping" as Route,
-    title: "Handleliste",
-    description: "Legg til og kryss av varer raskt."
-  },
-  {
-    href: "/messages" as Route,
-    title: "Meldinger",
-    description: "Send beskjeder til husholdningen."
-  },
-  {
-    href: "/calendar" as Route,
-    title: "Kalender",
-    description: "Planlegg dagen med familieaktiviteter."
-  },
-  {
-    href: "/household" as Route,
-    title: "Husholdning",
-    description: "Inviter medlemmer og administrer roller."
-  }
-];
-
-const upcomingModules = [
-  {
-    title: "Økonomi",
-    description: "Kommer snart"
-  }
-];
 
 export default async function DashboardPage() {
   const [membership, shoppingData, todayData] = await Promise.all([
@@ -74,32 +42,6 @@ export default async function DashboardPage() {
         </div>
       </section>
       {todayData && <TodayWidget data={todayData} />}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {quickActions.map((module) => (
-          <Link
-            key={module.href}
-            href={module.href}
-            prefetch={false}
-            className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            <h2 className="text-lg font-bold text-slate-900">{module.title}</h2>
-            <p className="mt-2 text-sm text-slate-600">{module.description}</p>
-            <p className="mt-4 text-sm font-semibold text-primary">Åpne modul</p>
-          </Link>
-        ))}
-
-        {upcomingModules.map((module) => (
-          <div key={module.title} className="rounded-2xl bg-slate-100 p-5 ring-1 ring-slate-200">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="text-lg font-bold text-slate-600">{module.title}</h2>
-              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                {module.description}
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-slate-500">Vises i menyen, men er ikke prioritert for aktiv bruk akkurat nå.</p>
-          </div>
-        ))}
-      </section>
     </main>
   );
 }
