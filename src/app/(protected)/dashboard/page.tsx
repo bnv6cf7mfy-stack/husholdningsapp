@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { getCurrentMembership } from "@/features/household/queries";
+import { Suspense } from "react";
+import { getCurrentMembership, type CurrentMembership } from "@/features/household/queries";
 import { getTodayWidgetData } from "@/features/calendar/today-widget-queries";
 import { TodayWidget } from "@/features/calendar/components/today-widget";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
@@ -13,7 +14,7 @@ export default async function DashboardPage() {
 
   const adminSupabase = createAdminSupabaseClient();
 
-  const [openItemsResult, completedItemsResult, todayData] = await Promise.all([
+  const [openItemsResult, completedItemsResult] = await Promise.all([
     adminSupabase
       .from("shopping_items")
       .select("id", { count: "exact", head: true })
@@ -25,8 +26,7 @@ export default async function DashboardPage() {
       .select("id", { count: "exact", head: true })
       .eq("household_id", membership.householdId)
       .is("archived_at", null)
-      .eq("completed", true),
-    getTodayWidgetData(membership)
+      .eq("completed", true)
   ]);
 
   const openItems = openItemsResult.count ?? 0;
@@ -55,7 +55,29 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
-      {todayData && <TodayWidget data={todayData} />}
+      <Suspense fallback={<TodayWidgetLoading />}> 
+        <TodayWidgetSection membership={membership} />
+      </Suspense>
     </main>
+  );
+}
+
+async function TodayWidgetSection({ membership }: { membership: CurrentMembership }) {
+  const todayData = await getTodayWidgetData(membership);
+
+  if (!todayData) {
+    return null;
+  }
+
+  return <TodayWidget data={todayData} />;
+}
+
+function TodayWidgetLoading() {
+  return (
+    <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+      <div className="h-5 w-32 animate-pulse rounded bg-slate-200" />
+      <div className="mt-3 h-4 w-56 animate-pulse rounded bg-slate-100" />
+      <div className="mt-2 h-4 w-48 animate-pulse rounded bg-slate-100" />
+    </section>
   );
 }
