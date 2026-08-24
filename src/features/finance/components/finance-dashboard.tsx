@@ -31,6 +31,11 @@ function formatAmount(value: number) {
   return currencyFormatter.format(value);
 }
 
+/** Accepts both "," and "." as decimal separator (Norwegian keyboards produce ","). */
+function parseAmountInput(value: string): number {
+  return Number(value.trim().replace(/\s/g, "").replace(",", "."));
+}
+
 export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -65,7 +70,10 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
 
   function handleCreateAccount(event: React.FormEvent) {
     event.preventDefault();
-    if (!accountName.trim()) return;
+    if (!accountName.trim()) {
+      setError("Kontonavn er påkrevd.");
+      return;
+    }
     runAction(() =>
       createFinanceAccountAction({
         name: accountName.trim(),
@@ -80,8 +88,15 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
 
   function handleAddSnapshot(event: React.FormEvent) {
     event.preventDefault();
-    const balance = Number(snapshotBalance);
-    if (!snapshotAccountId || Number.isNaN(balance)) return;
+    if (!snapshotAccountId) {
+      setError("Velg en konto.");
+      return;
+    }
+    const balance = parseAmountInput(snapshotBalance);
+    if (Number.isNaN(balance)) {
+      setError("Ugyldig saldo. Bruk kun tall, f.eks. 71950,81.");
+      return;
+    }
     runAction(() =>
       addFinanceBalanceSnapshotAction({ accountId: snapshotAccountId, balanceDate: snapshotDate, balance })
     );
@@ -90,8 +105,15 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
 
   function handleCreateCashFlow(event: React.FormEvent) {
     event.preventDefault();
-    const baseAmount = Number(cashFlowAmount);
-    if (!cashFlowName.trim() || Number.isNaN(baseAmount)) return;
+    const baseAmount = parseAmountInput(cashFlowAmount);
+    if (!cashFlowName.trim()) {
+      setError("Navn er påkrevd.");
+      return;
+    }
+    if (Number.isNaN(baseAmount)) {
+      setError("Ugyldig beløp. Bruk kun tall, f.eks. 5000 eller 5000,50.");
+      return;
+    }
     runAction(() =>
       createFinanceCashFlowAction({
         cashFlowType,
