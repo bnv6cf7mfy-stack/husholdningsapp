@@ -166,7 +166,10 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
         validFrom: cashFlowValidFrom,
         validTo: cashFlowValidTo || null,
         recurrenceType: cashFlowRecurrence,
-        dayOfMonth: cashFlowRecurrence === "monthly" || cashFlowRecurrence === "quarterly" ? cashFlowDayOfMonth : undefined,
+        dayOfMonth:
+          cashFlowRecurrence === "monthly" || cashFlowRecurrence === "quarterly" || cashFlowRecurrence === "annual"
+            ? cashFlowDayOfMonth
+            : undefined,
         monthOfYear: cashFlowRecurrence === "annual" ? cashFlowMonthOfYear : undefined,
         adjustmentType: cashFlowAdjustment,
         fixedAnnualPercent,

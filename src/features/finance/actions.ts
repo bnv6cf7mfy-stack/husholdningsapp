@@ -16,6 +16,13 @@ import {
   reviseFinanceCashFlowSchema
 } from "./schemas";
 import { runForecastForHousehold } from "@/services/finance-forecast-service";
+import type { z } from "zod";
+
+/** Surfaces the first Zod issue instead of a generic "invalid input" message. */
+function describeParseError(result: z.ZodSafeParseError<unknown>, fallback: string): string {
+  const issue = result.error.issues[0];
+  return issue ? issue.message : fallback;
+}
 
 async function resolveFinanceContext() {
   const membership = await getCurrentMembership();
@@ -57,7 +64,7 @@ export type FinanceActionResult = { ok: true } | { ok: false; error: string };
 export async function createFinanceCategoryAction(input: unknown): Promise<FinanceActionResult> {
   const parsed = createFinanceCategorySchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "Ugyldig kategori." };
+    return { ok: false, error: describeParseError(parsed, "Ugyldig kategori.") };
   }
 
   const context = await resolveFinanceContext();
@@ -85,7 +92,7 @@ export async function createFinanceCategoryAction(input: unknown): Promise<Finan
 export async function createFinanceAccountAction(input: unknown): Promise<FinanceActionResult> {
   const parsed = createFinanceAccountSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "Ugyldig kontoinformasjon." };
+    return { ok: false, error: describeParseError(parsed, "Ugyldig kontoinformasjon.") };
   }
 
   const context = await resolveFinanceContext();
@@ -118,7 +125,7 @@ export async function createFinanceAccountAction(input: unknown): Promise<Financ
 export async function addFinanceBalanceSnapshotAction(input: unknown): Promise<FinanceActionResult> {
   const parsed = addFinanceBalanceSnapshotSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "Ugyldig saldopunkt." };
+    return { ok: false, error: describeParseError(parsed, "Ugyldig saldopunkt.") };
   }
 
   const context = await resolveFinanceContext();
@@ -158,7 +165,7 @@ export async function addFinanceBalanceSnapshotAction(input: unknown): Promise<F
 export async function createFinanceCashFlowAction(input: unknown): Promise<FinanceActionResult> {
   const parsed = createFinanceCashFlowSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "Ugyldig kontantstrøm." };
+    return { ok: false, error: describeParseError(parsed, "Ugyldig kontantstrøm.") };
   }
 
   const context = await resolveFinanceContext();
@@ -247,7 +254,7 @@ export async function createFinanceCashFlowAction(input: unknown): Promise<Finan
 export async function reviseFinanceCashFlowAction(input: unknown): Promise<FinanceActionResult> {
   const parsed = reviseFinanceCashFlowSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: "Ugyldig endring." };
+    return { ok: false, error: describeParseError(parsed, "Ugyldig endring.") };
   }
 
   const context = await resolveFinanceContext();
