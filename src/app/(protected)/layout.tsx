@@ -19,7 +19,7 @@ const navigationItems = [
   { href: "/calendar" as Route, label: "Kalender" },
   { href: "/recipes" as Route, label: "Oppskrifter" },
   { href: "/development" as Route, label: "Utvikling", enabled: false, badge: "Kommer snart" },
-  { href: "/finance" as Route, label: "Økonomi", enabled: false, badge: "Kommer snart" },
+  { href: "/finance" as Route, label: "Økonomi" },
   { href: "/children" as Route, label: "Barn", enabled: false, badge: "Kommer snart" },
   { href: "/settings" as Route, label: "Innstillinger" }
 ] satisfies NavigationItem[];

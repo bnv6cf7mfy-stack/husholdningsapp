@@ -57,6 +57,16 @@
 - [ ] Richer timeline
 - [ ] Optional media preparation
 
+## Phase 10 - Finance v1.0
+
+- [x] Cash flow domain (series/definitions/specific dates), accounts + balance snapshots, assumption series
+- [x] Recurrence + adjustment/regulation engine (pure, unit tested)
+- [x] Daily liquidity forecast engine + buffer policy
+- [x] Finance dashboard UI (accounts, cash flows, forecast summary)
+- [ ] Apply migration `202608240001_finance_domain.sql` to the connected Supabase project
+- [ ] Run and pass Finance RLS integration test + E2E flow
+- [ ] Month/year/multi-year chart visualization and drilldown (v1.0 spec follow-up)
+
 ## Phase 9 - Recipe to Shopping
 
 - [ ] Basic meal-to-list helper

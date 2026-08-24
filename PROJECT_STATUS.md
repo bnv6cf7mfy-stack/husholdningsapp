@@ -17,7 +17,7 @@ Modular monolith med domeneseparasjon i `src/features/*` og Supabase RLS som sik
 
 # Domain model
 
-Auth, Household, Children, Shopping, Calendar, Childcare, Meals, Recipes, Finance (future).
+Auth, Household, Children, Shopping, Calendar, Childcare, Meals, Recipes, Finance (v1.0 liquidity forecast implemented; see `docs/FINANCE_DOMAIN.md`).
 
 # Database model
 
@@ -79,6 +79,12 @@ Initial schema opprettet med tabeller for profiles, households, members, childre
 
 - `supabase/migrations/202608140001_initial_schema.sql`
 - `supabase/migrations/202608140002_household_bootstrap_policy.sql`
+- `supabase/migrations/202608150001_development_suggestions.sql`
+- `supabase/migrations/202608150002_development_suggestions_area.sql`
+- `supabase/migrations/202608150003_household_invitations.sql`
+- `supabase/migrations/202608150004_notifications.sql`
+- `supabase/migrations/202608150005_household_messages.sql`
+- `supabase/migrations/202608240001_finance_domain.sql` (Finance v1.0 — must still be run manually in the Supabase SQL Editor on any environment that doesn't have it yet)
 
 # Security status
 
@@ -93,6 +99,14 @@ Alle kvalitetssjekker kjørt og bestått lokalt:
 - vitest unit: 1/1 bestått
 - next build: exit 0, alle ruter kompilert
 
+# Finance v1.0 (2026-08-24)
+
+- Implemented as a new bounded context: `src/features/finance`, `src/services/finance-forecast-service.ts`, `src/app/(protected)/finance`.
+- Migration `202608240001_finance_domain.sql` adds 11 tables (categories, accounts, balance snapshots, assumption series/values, cash flow series/definitions/specific dates/occurrences, forecast runs, daily liquidity forecasts) with RLS on every table.
+- Unit tests for the pure domain logic (recurrence, adjustments, buffer policy, forecast engine) pass: 23/23. See `docs/FINANCE_DOMAIN.md` for calculation rules and documented scope deviations from `docs/FINANCE_DOMAIN_SPEC.md`.
+- Integration RLS test (`tests/integration/finance-rls-isolation.spec.ts`) and E2E test (`tests/e2e/finance.spec.ts`) are written but NOT yet passing/executed end-to-end: the Finance migration has not been applied to the connected Supabase project yet, so `finance_accounts` etc. don't exist there. Run the migration in the Supabase SQL Editor, then `npm run test:integration` and `npm run test:e2e`.
+- Nav entry for "Økonomi" enabled in `src/app/(protected)/layout.tsx` (was a disabled "Kommer snart" placeholder).
+
 # Last updated
 
-2026-08-14
+2026-08-24

@@ -29,3 +29,4 @@ build.log
 playwright-report
 test-results
 coverage
+.env*
