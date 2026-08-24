@@ -10,6 +10,13 @@ export type FinanceHouseholdMemberOption = {
   displayName: string;
 };
 
+export type FinanceCategoryOption = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  cashFlowScope: string;
+};
+
 export type FinanceAccountSummary = {
   id: string;
   name: string;
@@ -28,6 +35,7 @@ export type FinanceCashFlowSummary = {
   name: string;
   cashFlowType: "income" | "expense";
   baseAmount: number;
+  categoryName: string | null;
   recurrenceType: string;
   adjustmentType: string;
   ownerName: string | null;
@@ -75,7 +83,7 @@ export type FinanceForecastSummary = {
 export type FinanceOverview = {
   householdId: string;
   householdName: string;
-  categories: { id: string; name: string; cashFlowScope: string }[];
+  categories: FinanceCategoryOption[];
   accounts: FinanceAccountSummary[];
   cashFlows: FinanceCashFlowSummary[];
   householdMembers: FinanceHouseholdMemberOption[];
@@ -168,7 +176,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
   const [{ data: categories }, { data: accounts }, { data: definitions }, { data: members }] = await Promise.all([
     adminSupabase
       .from("finance_categories")
-      .select("id, name, cash_flow_scope")
+      .select("id, name, parent_id, cash_flow_scope")
       .eq("household_id", membership.householdId)
       .eq("is_active", true)
       .order("sort_order", { ascending: true }),
@@ -181,7 +189,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
     adminSupabase
       .from("finance_cash_flow_definitions")
       .select(
-        "id, series_id, name, cash_flow_type, base_amount, recurrence_type, adjustment_type, owner_member_id, valid_from, valid_to"
+        "id, series_id, name, cash_flow_type, base_amount, category_id, recurrence_type, adjustment_type, owner_member_id, valid_from, valid_to"
       )
       .eq("household_id", membership.householdId)
       .eq("is_active", true)
@@ -202,6 +210,8 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
   const memberNameByMemberId = new Map(
     (members ?? []).map((member) => [member.id, profileNameByProfileId.get(member.user_id) ?? "Ukjent"])
   );
+
+  const categoryNameById = new Map((categories ?? []).map((category) => [category.id, category.name]));
 
   const accountSummaries: FinanceAccountSummary[] = [];
   for (const account of accounts ?? []) {
@@ -282,6 +292,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
     categories: (categories ?? []).map((category) => ({
       id: category.id,
       name: category.name,
+      parentId: category.parent_id,
       cashFlowScope: category.cash_flow_scope
     })),
     accounts: accountSummaries,
@@ -291,6 +302,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
       name: definition.name,
       cashFlowType: definition.cash_flow_type,
       baseAmount: Number(definition.base_amount),
+      categoryName: definition.category_id ? (categoryNameById.get(definition.category_id) ?? null) : null,
       recurrenceType: definition.recurrence_type,
       adjustmentType: definition.adjustment_type,
       ownerName: definition.owner_member_id ? (memberNameByMemberId.get(definition.owner_member_id) ?? null) : null,

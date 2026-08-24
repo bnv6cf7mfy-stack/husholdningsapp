@@ -21,6 +21,14 @@ export const addFinanceBalanceSnapshotSchema = z.object({
   balance: z.number()
 });
 
+export const financeCashFlowScopeSchema = z.enum(["income", "expense", "both"]);
+
+export const createFinanceCategorySchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  parentId: z.string().uuid().nullable().optional(),
+  cashFlowScope: financeCashFlowScopeSchema.default("both")
+});
+
 export const financeCashFlowTypeSchema = z.enum(["income", "expense"]);
 export const financeRecurrenceTypeSchema = z.enum(["once", "monthly", "quarterly", "annual", "specific_dates"]);
 export const financeAdjustmentTypeSchema = z.enum([
@@ -88,5 +96,6 @@ export const reviseFinanceCashFlowSchema = z.object({
 
 export type CreateFinanceAccountInput = z.infer<typeof createFinanceAccountSchema>;
 export type AddFinanceBalanceSnapshotInput = z.infer<typeof addFinanceBalanceSnapshotSchema>;
+export type CreateFinanceCategoryInput = z.infer<typeof createFinanceCategorySchema>;
 export type CreateFinanceCashFlowInput = z.infer<typeof createFinanceCashFlowSchema>;
 export type ReviseFinanceCashFlowInput = z.infer<typeof reviseFinanceCashFlowSchema>;

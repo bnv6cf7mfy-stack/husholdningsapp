@@ -12,6 +12,7 @@ import {
   addFinanceBalanceSnapshotSchema,
   createFinanceAccountSchema,
   createFinanceCashFlowSchema,
+  createFinanceCategorySchema,
   reviseFinanceCashFlowSchema
 } from "./schemas";
 import { runForecastForHousehold } from "@/services/finance-forecast-service";
@@ -52,6 +53,34 @@ async function assertCategoryBelongsToHousehold(categoryId: string | null | unde
 }
 
 export type FinanceActionResult = { ok: true } | { ok: false; error: string };
+
+export async function createFinanceCategoryAction(input: unknown): Promise<FinanceActionResult> {
+  const parsed = createFinanceCategorySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: "Ugyldig kategori." };
+  }
+
+  const context = await resolveFinanceContext();
+  if (!context) {
+    return { ok: false, error: "Ingen aktiv husholdning." };
+  }
+
+  if (!(await assertCategoryBelongsToHousehold(parsed.data.parentId, context.householdId))) {
+    return { ok: false, error: "Overordnet kategori tilhører ikke husholdningen." };
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+  const { error } = await adminSupabase.from("finance_categories").insert({
+    household_id: context.householdId,
+    name: parsed.data.name,
+    parent_id: parsed.data.parentId ?? null,
+    cash_flow_scope: parsed.data.cashFlowScope,
+    created_by: context.profileId
+  });
+
+  revalidatePath("/finance");
+  return error ? { ok: false, error: "Kunne ikke opprette kategori. Navnet finnes kanskje allerede." } : { ok: true };
+}
 
 export async function createFinanceAccountAction(input: unknown): Promise<FinanceActionResult> {
   const parsed = createFinanceAccountSchema.safeParse(input);
