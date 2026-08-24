@@ -9,6 +9,7 @@ import {
   runFinanceForecastAction
 } from "@/features/finance/actions";
 import type { FinanceOverview } from "@/features/finance/queries";
+import { ForecastChart } from "./forecast-chart";
 
 const accountTypeLabels: Record<string, string> = {
   checking: "Brukskonto",
@@ -24,6 +25,17 @@ const recurrenceLabels: Record<string, string> = {
   annual: "Årlig",
   specific_dates: "Spesifikke datoer"
 };
+
+const adjustmentLabels: Record<string, string> = {
+  none: "Ingen regulering",
+  fixed_annual_percent: "Fast årlig prosent",
+  cpi: "KPI",
+  wage_growth: "Lønnsøkning",
+  interest_rate: "Rente",
+  custom_assumption: "Egendefinert"
+};
+
+const FELLES_OPTION_VALUE = "";
 
 const currencyFormatter = new Intl.NumberFormat("nb-NO", { style: "currency", currency: "NOK", maximumFractionDigits: 0 });
 
@@ -43,6 +55,7 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
 
   const [accountName, setAccountName] = useState("");
   const [accountType, setAccountType] = useState("checking");
+  const [accountOwnerId, setAccountOwnerId] = useState(FELLES_OPTION_VALUE);
   const [drawPriority, setDrawPriority] = useState(0);
 
   const [snapshotAccountId, setSnapshotAccountId] = useState(overview.accounts[0]?.id ?? "");
@@ -52,9 +65,14 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
   const [cashFlowType, setCashFlowType] = useState<"income" | "expense">("expense");
   const [cashFlowName, setCashFlowName] = useState("");
   const [cashFlowAmount, setCashFlowAmount] = useState("");
+  const [cashFlowOwnerId, setCashFlowOwnerId] = useState(FELLES_OPTION_VALUE);
   const [cashFlowRecurrence, setCashFlowRecurrence] = useState("monthly");
   const [cashFlowDayOfMonth, setCashFlowDayOfMonth] = useState(1);
+  const [cashFlowMonthOfYear, setCashFlowMonthOfYear] = useState(1);
   const [cashFlowValidFrom, setCashFlowValidFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [cashFlowValidTo, setCashFlowValidTo] = useState("");
+  const [cashFlowAdjustment, setCashFlowAdjustment] = useState("none");
+  const [cashFlowAdjustmentPercent, setCashFlowAdjustmentPercent] = useState("");
 
   function runAction(action: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -78,6 +96,7 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
       createFinanceAccountAction({
         name: accountName.trim(),
         accountType,
+        ownerMemberId: accountOwnerId || null,
         currency: "NOK",
         paymentEnabled: true,
         drawPriority
@@ -114,25 +133,45 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
       setError("Ugyldig beløp. Bruk kun tall, f.eks. 5000 eller 5000,50.");
       return;
     }
+
+    let fixedAnnualPercent: number | undefined;
+    if (cashFlowAdjustment === "fixed_annual_percent") {
+      const percent = parseAmountInput(cashFlowAdjustmentPercent);
+      if (Number.isNaN(percent)) {
+        setError("Ugyldig prosentsats. Bruk kun tall, f.eks. 3 eller 3,5.");
+        return;
+      }
+      fixedAnnualPercent = percent / 100;
+    }
+
     runAction(() =>
       createFinanceCashFlowAction({
         cashFlowType,
         name: cashFlowName.trim(),
         baseAmount,
+        ownerMemberId: cashFlowOwnerId || null,
         validFrom: cashFlowValidFrom,
+        validTo: cashFlowValidTo || null,
         recurrenceType: cashFlowRecurrence,
         dayOfMonth: cashFlowRecurrence === "monthly" || cashFlowRecurrence === "quarterly" ? cashFlowDayOfMonth : undefined,
-        monthOfYear: cashFlowRecurrence === "annual" ? 1 : undefined,
+        monthOfYear: cashFlowRecurrence === "annual" ? cashFlowMonthOfYear : undefined,
+        adjustmentType: cashFlowAdjustment,
+        fixedAnnualPercent,
         specificDates: []
       })
     );
     setCashFlowName("");
     setCashFlowAmount("");
+    setCashFlowValidTo("");
+    setCashFlowAdjustment("none");
+    setCashFlowAdjustmentPercent("");
   }
 
   function handleRunForecast() {
     runAction(() => runFinanceForecastAction());
   }
+
+  const memberOptions = [{ id: FELLES_OPTION_VALUE, displayName: "Felles" }, ...overview.householdMembers];
 
   return (
     <div className="flex flex-col gap-6">
@@ -157,25 +196,30 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
         </div>
 
         {overview.forecast ? (
-          <dl className="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-            <div>
-              <dt className="text-slate-500">Laveste saldo</dt>
-              <dd className="font-semibold">{formatAmount(overview.forecast.lowestBalance)}</dd>
-              <dd className="text-xs text-slate-400">{overview.forecast.lowestBalanceDate}</dd>
+          <>
+            <dl className="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+              <div>
+                <dt className="text-slate-500">Laveste saldo</dt>
+                <dd className="font-semibold">{formatAmount(overview.forecast.lowestBalance)}</dd>
+                <dd className="text-xs text-slate-400">{overview.forecast.lowestBalanceDate}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Minimum nødvendig buffer</dt>
+                <dd className="font-semibold">{formatAmount(overview.forecast.minimumRequiredBuffer)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Anbefalt buffer</dt>
+                <dd className="font-semibold">{formatAmount(overview.forecast.recommendedBuffer)}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Kritiske dager</dt>
+                <dd className="font-semibold">{overview.forecast.criticalDayCount}</dd>
+              </div>
+            </dl>
+            <div className="mt-6 border-t border-slate-100 pt-6">
+              <ForecastChart chart={overview.forecast.chart} />
             </div>
-            <div>
-              <dt className="text-slate-500">Minimum nødvendig buffer</dt>
-              <dd className="font-semibold">{formatAmount(overview.forecast.minimumRequiredBuffer)}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Anbefalt buffer</dt>
-              <dd className="font-semibold">{formatAmount(overview.forecast.recommendedBuffer)}</dd>
-            </div>
-            <div>
-              <dt className="text-slate-500">Kritiske dager</dt>
-              <dd className="font-semibold">{overview.forecast.criticalDayCount}</dd>
-            </div>
-          </dl>
+          </>
         ) : (
           <p className="mt-4 text-sm text-slate-600">
             Ingen prognose kjørt ennå. Registrer minst én konto og kontantstrøm, og trykk «Kjør prognose».
@@ -188,20 +232,7 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
       </section>
 
       <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-        <h2 className="text-lg font-bold">Kontoer</h2>
-        <ul className="mt-3 flex flex-col gap-2">
-          {overview.accounts.map((account) => (
-            <li key={account.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2 text-sm">
-              <span>
-                {account.name} <span className="text-slate-400">({accountTypeLabels[account.accountType]})</span>
-              </span>
-              <span className="font-semibold">
-                {account.latestBalance != null ? formatAmount(account.latestBalance) : "Ingen saldo registrert"}
-              </span>
-            </li>
-          ))}
-          {overview.accounts.length === 0 ? <li className="text-sm text-slate-500">Ingen kontoer registrert.</li> : null}
-        </ul>
+        <h2 className="text-lg font-bold">Registrer konto og saldo</h2>
 
         <form onSubmit={handleCreateAccount} className="mt-4 flex flex-wrap items-end gap-3">
           <label className="flex flex-col text-xs text-slate-500">
@@ -223,6 +254,20 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
               {Object.entries(accountTypeLabels).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col text-xs text-slate-500">
+            Hvem
+            <select
+              value={accountOwnerId}
+              onChange={(event) => setAccountOwnerId(event.target.value)}
+              className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              {memberOptions.map((member) => (
+                <option key={member.id || "felles"} value={member.id}>
+                  {member.displayName}
                 </option>
               ))}
             </select>
@@ -284,23 +329,7 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
       </section>
 
       <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-        <h2 className="text-lg font-bold">Inntekter og utgifter</h2>
-        <ul className="mt-3 flex flex-col gap-2">
-          {overview.cashFlows.map((cashFlow) => (
-            <li key={cashFlow.definitionId} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2 text-sm">
-              <span>
-                {cashFlow.name}{" "}
-                <span className="text-slate-400">
-                  ({cashFlow.cashFlowType === "income" ? "Inntekt" : "Utgift"}, {recurrenceLabels[cashFlow.recurrenceType]})
-                </span>
-              </span>
-              <span className="font-semibold">{formatAmount(cashFlow.baseAmount)}</span>
-            </li>
-          ))}
-          {overview.cashFlows.length === 0 ? (
-            <li className="text-sm text-slate-500">Ingen inntekter eller utgifter registrert.</li>
-          ) : null}
-        </ul>
+        <h2 className="text-lg font-bold">Registrer inntekt eller utgift</h2>
 
         <form onSubmit={handleCreateCashFlow} className="mt-4 flex flex-wrap items-end gap-3">
           <label className="flex flex-col text-xs text-slate-500">
@@ -333,19 +362,31 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
             />
           </label>
           <label className="flex flex-col text-xs text-slate-500">
+            Hvem
+            <select
+              value={cashFlowOwnerId}
+              onChange={(event) => setCashFlowOwnerId(event.target.value)}
+              className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              {memberOptions.map((member) => (
+                <option key={member.id || "felles"} value={member.id}>
+                  {member.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col text-xs text-slate-500">
             Gjentakelse
             <select
               value={cashFlowRecurrence}
               onChange={(event) => setCashFlowRecurrence(event.target.value)}
               className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
             >
-              {Object.entries(recurrenceLabels)
-                .filter(([value]) => value !== "specific_dates")
-                .map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+              {Object.entries(recurrenceLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </select>
           </label>
           {cashFlowRecurrence === "monthly" || cashFlowRecurrence === "quarterly" ? (
@@ -361,6 +402,32 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
               />
             </label>
           ) : null}
+          {cashFlowRecurrence === "annual" ? (
+            <>
+              <label className="flex flex-col text-xs text-slate-500">
+                Måned
+                <input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={cashFlowMonthOfYear}
+                  onChange={(event) => setCashFlowMonthOfYear(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+              <label className="flex flex-col text-xs text-slate-500">
+                Dag
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={cashFlowDayOfMonth}
+                  onChange={(event) => setCashFlowDayOfMonth(Number(event.target.value))}
+                  className="mt-1 w-20 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                />
+              </label>
+            </>
+          ) : null}
           <label className="flex flex-col text-xs text-slate-500">
             Gyldig fra
             <input
@@ -370,11 +437,97 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
               className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
             />
           </label>
+          <label className="flex flex-col text-xs text-slate-500">
+            Gyldig til (valgfritt)
+            <input
+              type="date"
+              value={cashFlowValidTo}
+              onChange={(event) => setCashFlowValidTo(event.target.value)}
+              className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="flex flex-col text-xs text-slate-500">
+            Regulering
+            <select
+              value={cashFlowAdjustment}
+              onChange={(event) => setCashFlowAdjustment(event.target.value)}
+              className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            >
+              <option value="none">Ingen</option>
+              <option value="fixed_annual_percent">Fast årlig prosent</option>
+              <option value="cpi" disabled>
+                KPI (kommer snart)
+              </option>
+              <option value="wage_growth" disabled>
+                Lønnsøkning (kommer snart)
+              </option>
+              <option value="interest_rate" disabled>
+                Rente (kommer snart)
+              </option>
+            </select>
+          </label>
+          {cashFlowAdjustment === "fixed_annual_percent" ? (
+            <label className="flex flex-col text-xs text-slate-500">
+              Prosent per år
+              <input
+                value={cashFlowAdjustmentPercent}
+                onChange={(event) => setCashFlowAdjustmentPercent(event.target.value)}
+                className="mt-1 w-24 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                placeholder="3"
+              />
+            </label>
+          ) : null}
           <button type="submit" disabled={pending} className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
             Legg til
           </button>
         </form>
+        <p className="mt-2 text-xs text-slate-400">
+          KPI, lønnsøkning og rente krever en forutsetningsserie og kommer i en senere versjon (se docs/FINANCE_DOMAIN.md).
+          Registreringsåret reguleres ikke automatisk.
+        </p>
+      </section>
+
+      <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+        <h2 className="text-lg font-bold">Kontoer</h2>
+        <ul className="mt-3 flex flex-col gap-2">
+          {overview.accounts.map((account) => (
+            <li key={account.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2 text-sm">
+              <span>
+                {account.name}{" "}
+                <span className="text-slate-400">
+                  ({accountTypeLabels[account.accountType]}, {account.ownerName ?? "Felles"})
+                </span>
+              </span>
+              <span className="font-semibold">
+                {account.latestBalance != null ? formatAmount(account.latestBalance) : "Ingen saldo registrert"}
+              </span>
+            </li>
+          ))}
+          {overview.accounts.length === 0 ? <li className="text-sm text-slate-500">Ingen kontoer registrert.</li> : null}
+        </ul>
+      </section>
+
+      <section className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
+        <h2 className="text-lg font-bold">Inntekter og utgifter</h2>
+        <ul className="mt-3 flex flex-col gap-2">
+          {overview.cashFlows.map((cashFlow) => (
+            <li key={cashFlow.definitionId} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2 text-sm">
+              <span>
+                {cashFlow.name}{" "}
+                <span className="text-slate-400">
+                  ({cashFlow.cashFlowType === "income" ? "Inntekt" : "Utgift"}, {recurrenceLabels[cashFlow.recurrenceType]},{" "}
+                  {adjustmentLabels[cashFlow.adjustmentType] ?? cashFlow.adjustmentType}, {cashFlow.ownerName ?? "Felles"})
+                </span>
+              </span>
+              <span className="font-semibold">{formatAmount(cashFlow.baseAmount)}</span>
+            </li>
+          ))}
+          {overview.cashFlows.length === 0 ? (
+            <li className="text-sm text-slate-500">Ingen inntekter eller utgifter registrert.</li>
+          ) : null}
+        </ul>
       </section>
     </div>
   );
 }
+
