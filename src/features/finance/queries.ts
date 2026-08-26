@@ -67,9 +67,11 @@ export type FinanceChartYearPoint = {
 export type FinanceChartMultiYearPoint = {
   year: string;
   closingBalance: number;
+  netCashFlow: number;
 };
 
 export const FELLES_MEMBER_KEY = "felles";
+export const ALL_HOUSEHOLD_OWNER_KEY = "all";
 
 export type FinanceMemberChartSeries = {
   ownerKey: string;
@@ -234,7 +236,13 @@ async function getMemberCashFlowChartSeries(
       return point;
     });
 
-    const multiYear = multiYearDates.map((date) => ({ year: date.slice(0, 4), closingBalance: valueAt(date, key) }));
+    let previousMultiYearValue = 0;
+    const multiYear = multiYearDates.map((date) => {
+      const value = valueAt(date, key);
+      const point = { year: date.slice(0, 4), closingBalance: value, netCashFlow: value - previousMultiYearValue };
+      previousMultiYearValue = value;
+      return point;
+    });
 
     return { ownerKey: key, ownerLabel: label, month, year, multiYear };
   });
@@ -300,6 +308,18 @@ async function getForecastChartData(
     .in("forecast_date", Array.from(new Set(yearEndDates)))
     .order("forecast_date", { ascending: true });
 
+  // The aggregate row's opening balance on day one, used as the baseline for the
+  // first (possibly partial) year's net cash flow (closingBalance[year] - previousBaseline).
+  const { data: openingRow } = await adminSupabase
+    .from("finance_daily_liquidity_forecasts")
+    .select("opening_balance")
+    .eq("forecast_run_id", forecastRunId)
+    .is("account_id", null)
+    .eq("forecast_date", forecastStart)
+    .maybeSingle();
+
+  let previousYearEndBalance = openingRow ? Number(openingRow.opening_balance) : 0;
+
   const perMember = await getMemberCashFlowChartSeries(adminSupabase, householdId, forecastStart, forecastEnd, members);
 
   return {
@@ -310,12 +330,197 @@ async function getForecastChartData(
       isCritical: row.is_critical
     })),
     year: Array.from(monthlyBuckets.entries()).map(([month, bucket]) => ({ month, ...bucket })),
-    multiYear: (multiYearRows ?? []).map((row) => ({
-      year: row.forecast_date.slice(0, 4),
-      closingBalance: Number(row.closing_balance)
-    })),
+    multiYear: (multiYearRows ?? []).map((row) => {
+      const closingBalance = Number(row.closing_balance);
+      const netCashFlow = closingBalance - previousYearEndBalance;
+      previousYearEndBalance = closingBalance;
+      return { year: row.forecast_date.slice(0, 4), closingBalance, netCashFlow };
+    }),
     perMember
   };
+}
+
+/** Fetches every cash flow occurrence for one owner (a member id, or FELLES_MEMBER_KEY for unowned), paginated. */
+async function fetchOwnerOccurrences(
+  adminSupabase: ReturnType<typeof createAdminSupabaseClient>,
+  householdId: string,
+  ownerKey: string,
+  fromDate: string,
+  toDate: string
+): Promise<{ date: string; amount: number }[]> {
+  const pageSize = 1000;
+  let offset = 0;
+  const rows: { date: string; amount: number }[] = [];
+
+  while (true) {
+    let query = adminSupabase
+      .from("finance_cash_flow_occurrences")
+      .select("occurrence_date, signed_amount, finance_cash_flow_definitions!inner(owner_member_id)")
+      .eq("household_id", householdId)
+      .gte("occurrence_date", fromDate)
+      .lte("occurrence_date", toDate)
+      .order("occurrence_date", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    query =
+      ownerKey === FELLES_MEMBER_KEY
+        ? query.is("finance_cash_flow_definitions.owner_member_id", null)
+        : query.eq("finance_cash_flow_definitions.owner_member_id", ownerKey);
+
+    const { data, error } = await query;
+    if (error || !data || data.length === 0) break;
+
+    for (const row of data) {
+      rows.push({ date: row.occurrence_date, amount: Number(row.signed_amount) });
+    }
+
+    if (data.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return rows;
+}
+
+export type FinanceChartSelectionResult =
+  | { view: "month"; points: FinanceChartMonthPoint[] }
+  | { view: "year"; points: FinanceChartYearPoint[] }
+  | { error: string };
+
+/**
+ * On-demand fetch for an arbitrary month or year (beyond the default first month/year
+ * already preloaded in `FinanceOverview.forecast.chart`), used when the user picks a
+ * different month/year in the chart. "all" reads real balances directly; a specific
+ * member/"felles" recomputes the cumulative net contribution up to each day, since that
+ * view has no persisted per-day rows of its own (see docs/FINANCE_DOMAIN.md).
+ */
+export async function getFinanceChartSelection(input: {
+  view: "month" | "year";
+  year: number;
+  month?: number;
+  ownerKey: string;
+}): Promise<FinanceChartSelectionResult> {
+  const membership = await getCurrentMembership();
+  if (!membership) return { error: "Ingen aktiv husholdning." };
+
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: latestRun } = await adminSupabase
+    .from("finance_forecast_runs")
+    .select("id, forecast_start, forecast_end")
+    .eq("household_id", membership.householdId)
+    .eq("status", "completed")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latestRun) return { error: "Ingen prognose kjørt ennå." };
+
+  const forecastStart = latestRun.forecast_start;
+  const forecastEnd = latestRun.forecast_end;
+
+  const rangeStart =
+    input.view === "month" ? `${input.year}-${String(input.month ?? 1).padStart(2, "0")}-01` : `${input.year}-01-01`;
+  const rangeEndCandidate =
+    input.view === "month" ? lastDayOfMonthIso(input.year, (input.month ?? 1) - 1) : `${input.year}-12-31`;
+
+  const start = rangeStart < forecastStart ? forecastStart : rangeStart;
+  const end = rangeEndCandidate > forecastEnd ? forecastEnd : rangeEndCandidate;
+
+  if (start > end) {
+    return input.view === "month" ? { view: "month", points: [] } : { view: "year", points: [] };
+  }
+
+  if (input.ownerKey === ALL_HOUSEHOLD_OWNER_KEY) {
+    const { data } = await adminSupabase
+      .from("finance_daily_liquidity_forecasts")
+      .select("forecast_date, closing_balance, net_cash_flow, is_critical")
+      .eq("forecast_run_id", latestRun.id)
+      .is("account_id", null)
+      .gte("forecast_date", start)
+      .lte("forecast_date", end)
+      .order("forecast_date", { ascending: true });
+
+    if (input.view === "month") {
+      return {
+        view: "month",
+        points: (data ?? []).map((row) => ({
+          date: row.forecast_date,
+          closingBalance: Number(row.closing_balance),
+          netCashFlow: Number(row.net_cash_flow),
+          isCritical: row.is_critical
+        }))
+      };
+    }
+
+    const monthlyBuckets = new Map<string, { closingBalance: number; netCashFlow: number; isCritical: boolean }>();
+    for (const row of data ?? []) {
+      const monthKey = row.forecast_date.slice(0, 7);
+      const bucket = monthlyBuckets.get(monthKey) ?? { closingBalance: 0, netCashFlow: 0, isCritical: false };
+      bucket.closingBalance = Number(row.closing_balance);
+      bucket.netCashFlow += Number(row.net_cash_flow);
+      bucket.isCritical = bucket.isCritical || row.is_critical;
+      monthlyBuckets.set(monthKey, bucket);
+    }
+    return { view: "year", points: Array.from(monthlyBuckets.entries()).map(([month, bucket]) => ({ month, ...bucket })) };
+  }
+
+  // Per-member/"felles": recompute the cumulative running total from forecastStart.
+  const occurrences = await fetchOwnerOccurrences(adminSupabase, membership.householdId, input.ownerKey, forecastStart, end);
+
+  const checkpointDates: string[] = [];
+  if (input.view === "month") {
+    const cursor = new Date(`${start}T00:00:00Z`);
+    const endDate = new Date(`${end}T00:00:00Z`);
+    while (cursor <= endDate) {
+      checkpointDates.push(cursor.toISOString().slice(0, 10));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  } else {
+    let y = Number(start.slice(0, 4));
+    let m = Number(start.slice(5, 7)) - 1;
+    const endYear = Number(end.slice(0, 4));
+    const endMonth = Number(end.slice(5, 7)) - 1;
+    while (y < endYear || (y === endYear && m <= endMonth)) {
+      checkpointDates.push(lastDayOfMonthIso(y, m));
+      m += 1;
+      if (m > 11) {
+        m = 0;
+        y += 1;
+      }
+    }
+  }
+
+  let running = 0;
+  let occurrenceIndex = 0;
+  while (occurrenceIndex < occurrences.length && occurrences[occurrenceIndex].date < start) {
+    running += occurrences[occurrenceIndex].amount;
+    occurrenceIndex += 1;
+  }
+  let previous = running;
+
+  if (input.view === "month") {
+    const points: FinanceChartMonthPoint[] = checkpointDates.map((date) => {
+      while (occurrenceIndex < occurrences.length && occurrences[occurrenceIndex].date <= date) {
+        running += occurrences[occurrenceIndex].amount;
+        occurrenceIndex += 1;
+      }
+      const point = { date, closingBalance: running, netCashFlow: running - previous, isCritical: false };
+      previous = running;
+      return point;
+    });
+    return { view: "month", points };
+  }
+
+  const points: FinanceChartYearPoint[] = checkpointDates.map((date) => {
+    while (occurrenceIndex < occurrences.length && occurrences[occurrenceIndex].date <= date) {
+      running += occurrences[occurrenceIndex].amount;
+      occurrenceIndex += 1;
+    }
+    const point = { month: date.slice(0, 7), closingBalance: running, netCashFlow: running - previous, isCritical: false };
+    previous = running;
+    return point;
+  });
+  return { view: "year", points };
 }
 
 export async function getFinanceOverview(): Promise<FinanceOverview | null> {

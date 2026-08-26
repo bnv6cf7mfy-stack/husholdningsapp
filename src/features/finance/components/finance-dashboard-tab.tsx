@@ -50,7 +50,7 @@ export function FinanceDashboardTab({ overview, pending, onRunForecast }: Financ
             </div>
           </dl>
           <div className="mt-6 border-t border-slate-100 pt-6">
-            <ForecastChart chart={overview.forecast.chart} />
+            <ForecastChart chart={overview.forecast.chart} forecastStart={overview.forecast.forecastStart} forecastEnd={overview.forecast.forecastEnd} />
           </div>
         </>
       ) : (

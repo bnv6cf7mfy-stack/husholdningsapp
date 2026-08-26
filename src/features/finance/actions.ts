@@ -19,6 +19,7 @@ import {
   updateFinanceCashFlowSchema
 } from "./schemas";
 import { runForecastForHousehold } from "@/services/finance-forecast-service";
+import { getFinanceChartSelection, type FinanceChartSelectionResult } from "./queries";
 import type { z } from "zod";
 
 /** Surfaces the first Zod issue instead of a generic "invalid input" message. */
@@ -453,4 +454,14 @@ export async function runFinanceForecastAction(): Promise<FinanceActionResult> {
 
   revalidatePath("/finance");
   return { ok: true };
+}
+
+/** Read-only wrapper so the chart can fetch an arbitrary month/year on demand. */
+export async function getFinanceChartSelectionAction(input: {
+  view: "month" | "year";
+  year: number;
+  month?: number;
+  ownerKey: string;
+}): Promise<FinanceChartSelectionResult> {
+  return getFinanceChartSelection(input);
 }
