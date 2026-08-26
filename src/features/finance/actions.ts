@@ -346,6 +346,34 @@ export async function updateFinanceCashFlowAction(input: unknown): Promise<Finan
     return { ok: false, error: "Fant ikke aktiv kontantstrøm." };
   }
 
+  // If the edit takes effect on or before the current version's own start date, there is no
+  // historical period to preserve yet — update it in place instead of versioning. Versioning
+  // here would try to close the old version the day before it even started, which violates the
+  // "valid_to >= valid_from" constraint (this was the "Kunne ikke avslutte forrige versjon" bug).
+  if (data.effectiveFrom <= activeDefinition.valid_from) {
+    const { error: updateError } = await adminSupabase
+      .from("finance_cash_flow_definitions")
+      .update({
+        cash_flow_type: data.cashFlowType,
+        category_id: data.categoryId ?? null,
+        name: data.name,
+        base_amount: data.baseAmount,
+        owner_member_id: data.ownerMemberId,
+        valid_from: data.effectiveFrom,
+        valid_to: data.validTo ?? null,
+        recurrence_type: data.recurrenceType,
+        day_of_month: data.dayOfMonth ?? null,
+        month_of_year: data.monthOfYear ?? null,
+        quarter_start_month: data.quarterStartMonth ?? null,
+        adjustment_type: data.adjustmentType,
+        margin_rate: data.adjustmentType === "fixed_annual_percent" ? (data.fixedAnnualPercent ?? 0) : null
+      })
+      .eq("id", activeDefinition.id);
+
+    revalidatePath("/finance");
+    return updateError ? { ok: false, error: "Kunne ikke oppdatere kontantstrømmen." } : { ok: true };
+  }
+
   const dayBefore = new Date(`${data.effectiveFrom}T00:00:00Z`);
   dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
   const validToPreviousVersion = dayBefore.toISOString().slice(0, 10);
