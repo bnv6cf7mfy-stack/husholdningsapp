@@ -9,10 +9,6 @@
 
 - [ ] Partner invitation flow
 - [ ] Optional onboarding step: add child now
-- [ ] Finance v1.1 UX pass: reduce number of visible form fields (progressive disclosure / grouping)
-- [ ] Finance chart: show named months (e.g. "jan", "feb") instead of numeric month on the year view x-axis
-- [ ] Finance: speed up save/refresh responsiveness (parallelize per-account balance query in `getFinanceOverview`, consider optimistic UI updates)
-- [ ] Finance: add sub-tabs under Økonomi (Dashboard, Input, Innstillinger, Administrasjon) — see `/memories/repo/session-wrapup-2026-08-24.md` for a proposed structure
 
 # In progress
 
@@ -36,3 +32,4 @@
 - [x] RLS integration test harness for two households
 - [x] Finance v1.0 domain, migration, forecast engine, dashboard UI and unit tests (2026-08-24)
 - [x] Finance v1.0 migrations applied to Supabase + RLS recursion fix; Finance + existing RLS integration tests passing 12/12 (2026-08-24)
+- [x] Finance v1.1 UX pass: sub-tabs (Dashboard/Input/Innstillinger/Administrasjon), collapsed advanced fields, named chart months, parallelized account balance query, member filter on forecast chart, delete/edit for cash flows and accounts (2026-08-26)
