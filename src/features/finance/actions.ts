@@ -13,6 +13,9 @@ import {
   createFinanceAccountSchema,
   createFinanceCashFlowSchema,
   createFinanceCategorySchema,
+  deleteFinanceAccountSchema,
+  deleteFinanceCashFlowSchema,
+  editFinanceAccountSchema,
   reviseFinanceCashFlowSchema
 } from "./schemas";
 import { runForecastForHousehold } from "@/services/finance-forecast-service";
@@ -120,6 +123,62 @@ export async function createFinanceAccountAction(input: unknown): Promise<Financ
 
   revalidatePath("/finance");
   return error ? { ok: false, error: "Kunne ikke opprette konto." } : { ok: true };
+}
+
+export async function editFinanceAccountAction(input: unknown): Promise<FinanceActionResult> {
+  const parsed = editFinanceAccountSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: describeParseError(parsed, "Ugyldig kontoinformasjon.") };
+  }
+
+  const context = await resolveFinanceContext();
+  if (!context) {
+    return { ok: false, error: "Ingen aktiv husholdning." };
+  }
+
+  if (!(await assertMemberBelongsToHousehold(parsed.data.ownerMemberId, context.householdId))) {
+    return { ok: false, error: "Eier tilhører ikke husholdningen." };
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+  const { error } = await adminSupabase
+    .from("finance_accounts")
+    .update({
+      name: parsed.data.name,
+      account_type: parsed.data.accountType,
+      owner_member_id: parsed.data.ownerMemberId ?? null,
+      payment_enabled: parsed.data.paymentEnabled,
+      draw_priority: parsed.data.drawPriority,
+      minimum_balance: parsed.data.minimumBalance ?? null
+    })
+    .eq("id", parsed.data.accountId)
+    .eq("household_id", context.householdId);
+
+  revalidatePath("/finance");
+  return error ? { ok: false, error: "Kunne ikke oppdatere kontoen." } : { ok: true };
+}
+
+/** Soft-deletes an account (is_active = false); historical balance snapshots are preserved. */
+export async function deleteFinanceAccountAction(input: unknown): Promise<FinanceActionResult> {
+  const parsed = deleteFinanceAccountSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: describeParseError(parsed, "Ugyldig konto.") };
+  }
+
+  const context = await resolveFinanceContext();
+  if (!context) {
+    return { ok: false, error: "Ingen aktiv husholdning." };
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+  const { error } = await adminSupabase
+    .from("finance_accounts")
+    .update({ is_active: false })
+    .eq("id", parsed.data.accountId)
+    .eq("household_id", context.householdId);
+
+  revalidatePath("/finance");
+  return error ? { ok: false, error: "Kunne ikke slette kontoen." } : { ok: true };
 }
 
 export async function addFinanceBalanceSnapshotAction(input: unknown): Promise<FinanceActionResult> {
@@ -317,6 +376,58 @@ export async function reviseFinanceCashFlowAction(input: unknown): Promise<Finan
 
   revalidatePath("/finance");
   return newVersionError ? { ok: false, error: "Kunne ikke opprette ny versjon." } : { ok: true };
+}
+
+/**
+ * Closes the active definition on a series from today (no new future occurrences will be
+ * generated) and deactivates the series, matching the existing "never hard-delete history"
+ * principle: past occurrences and audit trail are preserved.
+ */
+export async function deleteFinanceCashFlowAction(input: unknown): Promise<FinanceActionResult> {
+  const parsed = deleteFinanceCashFlowSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: describeParseError(parsed, "Ugyldig kontantstrøm.") };
+  }
+
+  const context = await resolveFinanceContext();
+  if (!context) {
+    return { ok: false, error: "Ingen aktiv husholdning." };
+  }
+
+  const adminSupabase = createAdminSupabaseClient();
+
+  const { data: activeDefinition } = await adminSupabase
+    .from("finance_cash_flow_definitions")
+    .select("id, valid_from")
+    .eq("series_id", parsed.data.seriesId)
+    .eq("household_id", context.householdId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (!activeDefinition) {
+    return { ok: false, error: "Fant ikke aktiv kontantstrøm." };
+  }
+
+  const yesterday = new Date();
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const yesterdayIso = yesterday.toISOString().slice(0, 10);
+  // If the series was only ever valid in the future, close it at its own start date
+  // instead so it never produces a single occurrence.
+  const closeDate = activeDefinition.valid_from > yesterdayIso ? activeDefinition.valid_from : yesterdayIso;
+
+  const { error: definitionError } = await adminSupabase
+    .from("finance_cash_flow_definitions")
+    .update({ valid_to: closeDate, is_active: false })
+    .eq("id", activeDefinition.id);
+
+  const { error: seriesError } = await adminSupabase
+    .from("finance_cash_flow_series")
+    .update({ is_active: false })
+    .eq("id", parsed.data.seriesId)
+    .eq("household_id", context.householdId);
+
+  revalidatePath("/finance");
+  return definitionError || seriesError ? { ok: false, error: "Kunne ikke slette kontantstrømmen." } : { ok: true };
 }
 
 export async function runFinanceForecastAction(): Promise<FinanceActionResult> {

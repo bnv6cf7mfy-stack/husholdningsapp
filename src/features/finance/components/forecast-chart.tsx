@@ -10,6 +10,14 @@ const compactCurrencyFormatter = new Intl.NumberFormat("nb-NO", {
   notation: "compact",
   maximumFractionDigits: 1
 });
+const monthNameFormatter = new Intl.DateTimeFormat("nb-NO", { month: "short" });
+
+/** "2027-03" -> "mars" */
+function formatMonthLabel(yearMonth: string): string {
+  return monthNameFormatter.format(new Date(`${yearMonth}-01T00:00:00Z`));
+}
+
+const ALL_HOUSEHOLD_KEY = "all";
 
 const CHART_WIDTH = 640;
 const CHART_HEIGHT = 260;
@@ -165,47 +173,73 @@ function LiquidityLineChart({
 
 export function ForecastChart({ chart }: { chart: FinanceForecastChartData }) {
   const [view, setView] = useState<"month" | "year" | "multiYear">("year");
+  const [ownerKey, setOwnerKey] = useState<string>(ALL_HOUSEHOLD_KEY);
+
+  const ownerOptions = [{ key: ALL_HOUSEHOLD_KEY, label: "Alle (husholdningen samlet)" }, ...chart.perMember.map((m) => ({ key: m.ownerKey, label: m.ownerLabel }))];
+
+  const activeSeries = ownerKey === ALL_HOUSEHOLD_KEY ? chart : chart.perMember.find((m) => m.ownerKey === ownerKey);
 
   const points = useMemo<Point[]>(() => {
+    if (!activeSeries) return [];
     if (view === "month") {
-      return chart.month.map((p) => ({ label: p.date.slice(8, 10), value: p.closingBalance, isCritical: p.isCritical }));
+      return activeSeries.month.map((p) => ({ label: p.date.slice(8, 10), value: p.closingBalance, isCritical: p.isCritical }));
     }
     if (view === "year") {
-      return chart.year.map((p) => ({ label: p.month.slice(5, 7), value: p.closingBalance, isCritical: p.isCritical }));
+      return activeSeries.year.map((p) => ({ label: formatMonthLabel(p.month), value: p.closingBalance, isCritical: p.isCritical }));
     }
-    return chart.multiYear.map((p) => ({ label: p.year, value: p.closingBalance }));
-  }, [chart, view]);
+    return activeSeries.multiYear.map((p) => ({ label: p.year, value: p.closingBalance }));
+  }, [activeSeries, view]);
 
   const xAxisLabel = view === "month" ? "Dag i måneden" : view === "year" ? "Måned" : "År";
+  const isHouseholdView = ownerKey === ALL_HOUSEHOLD_KEY;
 
   return (
     <div>
-      <div className="flex gap-2">
-        {(
-          [
-            { key: "month", label: "Måned" },
-            { key: "year", label: "År" },
-            { key: "multiYear", label: "Flere år" }
-          ] as const
-        ).map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setView(tab.key)}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              view === tab.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
-            }`}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          {(
+            [
+              { key: "month", label: "Måned" },
+              { key: "year", label: "År" },
+              { key: "multiYear", label: "Flere år" }
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setView(tab.key)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                view === tab.key ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-xs text-slate-500">
+          Vis for
+          <select
+            value={ownerKey}
+            onChange={(event) => setOwnerKey(event.target.value)}
+            className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
           >
-            {tab.label}
-          </button>
-        ))}
+            {ownerOptions.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
       <div className="mt-4">
         <LiquidityLineChart points={points} xAxisLabel={xAxisLabel} emptyMessage="Ingen data for denne visningen ennå." />
       </div>
       <p className="mt-2 text-xs text-slate-400">
-        Y-aksen viser saldo (NOK), X-aksen viser {xAxisLabel.toLowerCase()}. Hold musepekeren over et punkt for å se nøyaktig verdi. Rød
-        markering betyr negativ eller kritisk saldo. Ren modellberegning, ikke finansrådgivning.
+        {isHouseholdView
+          ? "Y-aksen viser saldo på likvide kontoer (NOK)."
+          : "Y-aksen viser akkumulert netto kontantstrøm (inntekter minus utgifter) for valgt person/kategori, ikke faktisk kontosaldo."}{" "}
+        X-aksen viser {xAxisLabel.toLowerCase()}. Hold musepekeren over et punkt for å se nøyaktig verdi. Rød markering betyr negativt
+        beløp{isHouseholdView ? " eller kritisk saldo" : ""}. Ren modellberegning, ikke finansrådgivning.
       </p>
     </div>
   );

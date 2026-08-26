@@ -21,6 +21,20 @@ export const addFinanceBalanceSnapshotSchema = z.object({
   balance: z.number()
 });
 
+export const editFinanceAccountSchema = z.object({
+  accountId: z.string().uuid(),
+  name: z.string().trim().min(1).max(160),
+  accountType: financeAccountTypeSchema,
+  ownerMemberId: z.string().uuid().nullable().optional(),
+  paymentEnabled: z.boolean().default(true),
+  drawPriority: z.number().int().min(0).max(100).default(0),
+  minimumBalance: z.number().min(0).nullable().optional()
+});
+
+export const deleteFinanceAccountSchema = z.object({
+  accountId: z.string().uuid()
+});
+
 export const financeCashFlowScopeSchema = z.enum(["income", "expense", "both"]);
 
 export const createFinanceCategorySchema = z.object({
@@ -94,8 +108,15 @@ export const reviseFinanceCashFlowSchema = z.object({
   baseAmount: z.number().min(0)
 });
 
+export const deleteFinanceCashFlowSchema = z.object({
+  seriesId: z.string().uuid()
+});
+
 export type CreateFinanceAccountInput = z.infer<typeof createFinanceAccountSchema>;
 export type AddFinanceBalanceSnapshotInput = z.infer<typeof addFinanceBalanceSnapshotSchema>;
+export type EditFinanceAccountInput = z.infer<typeof editFinanceAccountSchema>;
+export type DeleteFinanceAccountInput = z.infer<typeof deleteFinanceAccountSchema>;
 export type CreateFinanceCategoryInput = z.infer<typeof createFinanceCategorySchema>;
 export type CreateFinanceCashFlowInput = z.infer<typeof createFinanceCashFlowSchema>;
 export type ReviseFinanceCashFlowInput = z.infer<typeof reviseFinanceCashFlowSchema>;
+export type DeleteFinanceCashFlowInput = z.infer<typeof deleteFinanceCashFlowSchema>;

@@ -7,6 +7,9 @@ import {
   createFinanceAccountAction,
   createFinanceCashFlowAction,
   createFinanceCategoryAction,
+  deleteFinanceAccountAction,
+  deleteFinanceCashFlowAction,
+  editFinanceAccountAction,
   reviseFinanceCashFlowAction,
   runFinanceForecastAction
 } from "@/features/finance/actions";
@@ -85,6 +88,13 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
   const [editingAmount, setEditingAmount] = useState("");
   const [editingEffectiveFrom, setEditingEffectiveFrom] = useState(() => new Date().toISOString().slice(0, 10));
+
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editAccountName, setEditAccountName] = useState("");
+  const [editAccountType, setEditAccountType] = useState("checking");
+  const [editAccountOwnerId, setEditAccountOwnerId] = useState(FELLES_OPTION_VALUE);
+  const [editAccountDrawPriority, setEditAccountDrawPriority] = useState(0);
+  const [editAccountBalance, setEditAccountBalance] = useState("");
 
   function runAction(action: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -223,6 +233,73 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
       })
     );
     setEditingSeriesId(null);
+  }
+
+  function handleDeleteCashFlow(seriesId: string, name: string) {
+    if (!window.confirm(`Slette «${name}»? Historikk beholdes, men den vil ikke lenger inngå i fremtidige prognoser.`)) {
+      return;
+    }
+    runAction(() => deleteFinanceCashFlowAction({ seriesId }));
+    if (editingSeriesId === seriesId) setEditingSeriesId(null);
+  }
+
+  function handleStartEditAccount(account: FinanceOverview["accounts"][number]) {
+    setEditingAccountId(account.id);
+    setEditAccountName(account.name);
+    setEditAccountType(account.accountType);
+    setEditAccountOwnerId(account.ownerMemberId ?? FELLES_OPTION_VALUE);
+    setEditAccountDrawPriority(account.drawPriority);
+    setEditAccountBalance(account.latestBalance != null ? String(account.latestBalance) : "");
+  }
+
+  function handleSaveEditAccount(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editingAccountId) return;
+    if (!editAccountName.trim()) {
+      setError("Kontonavn er påkrevd.");
+      return;
+    }
+
+    const accountId = editingAccountId;
+    const balanceInput = editAccountBalance.trim();
+    let newBalance: number | undefined;
+    if (balanceInput) {
+      newBalance = parseAmountInput(balanceInput);
+      if (Number.isNaN(newBalance)) {
+        setError("Ugyldig saldo. Bruk kun tall, f.eks. 71950,81.");
+        return;
+      }
+    }
+
+    runAction(async () => {
+      const editResult = await editFinanceAccountAction({
+        accountId,
+        name: editAccountName.trim(),
+        accountType: editAccountType,
+        ownerMemberId: editAccountOwnerId || null,
+        paymentEnabled: true,
+        drawPriority: editAccountDrawPriority
+      });
+      if (!editResult.ok) return editResult;
+
+      if (newBalance != null) {
+        return addFinanceBalanceSnapshotAction({
+          accountId,
+          balanceDate: new Date().toISOString().slice(0, 10),
+          balance: newBalance
+        });
+      }
+      return editResult;
+    });
+    setEditingAccountId(null);
+  }
+
+  function handleDeleteAccount(accountId: string, name: string) {
+    if (!window.confirm(`Slette kontoen «${name}»? Historiske saldopunkter beholdes.`)) {
+      return;
+    }
+    runAction(() => deleteFinanceAccountAction({ accountId }));
+    if (editingAccountId === accountId) setEditingAccountId(null);
   }
 
   function handleRunForecast() {
@@ -636,16 +713,104 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
         <h2 className="text-lg font-bold">Kontoer</h2>
         <ul className="mt-3 flex flex-col gap-2">
           {overview.accounts.map((account) => (
-            <li key={account.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-2 text-sm">
-              <span>
-                {account.name}{" "}
-                <span className="text-slate-400">
-                  ({accountTypeLabels[account.accountType]}, {account.ownerName ?? "Felles"})
+            <li key={account.id} className="rounded-xl bg-slate-50 px-4 py-2 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  {account.name}{" "}
+                  <span className="text-slate-400">
+                    ({accountTypeLabels[account.accountType]}, {account.ownerName ?? "Felles"})
+                  </span>
                 </span>
-              </span>
-              <span className="font-semibold">
-                {account.latestBalance != null ? formatAmount(account.latestBalance) : "Ingen saldo registrert"}
-              </span>
+                <span className="flex items-center gap-3">
+                  <span className="font-semibold">
+                    {account.latestBalance != null ? formatAmount(account.latestBalance) : "Ingen saldo registrert"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleStartEditAccount(account)}
+                    className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
+                  >
+                    Rediger
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteAccount(account.id, account.name)}
+                    className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-red-600 ring-1 ring-red-200"
+                  >
+                    Slett
+                  </button>
+                </span>
+              </div>
+
+              {editingAccountId === account.id ? (
+                <form onSubmit={handleSaveEditAccount} className="mt-3 flex flex-wrap items-end gap-3 border-t border-slate-200 pt-3">
+                  <label className="flex flex-col text-xs text-slate-500">
+                    Kontonavn
+                    <input
+                      value={editAccountName}
+                      onChange={(event) => setEditAccountName(event.target.value)}
+                      className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="flex flex-col text-xs text-slate-500">
+                    Type
+                    <select
+                      value={editAccountType}
+                      onChange={(event) => setEditAccountType(event.target.value)}
+                      className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      {Object.entries(accountTypeLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col text-xs text-slate-500">
+                    Hvem
+                    <select
+                      value={editAccountOwnerId}
+                      onChange={(event) => setEditAccountOwnerId(event.target.value)}
+                      className="mt-1 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    >
+                      {memberOptions.map((member) => (
+                        <option key={member.id || "felles"} value={member.id}>
+                          {member.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="flex flex-col text-xs text-slate-500">
+                    Trekkprioritet
+                    <input
+                      type="number"
+                      min={0}
+                      value={editAccountDrawPriority}
+                      onChange={(event) => setEditAccountDrawPriority(Number(event.target.value))}
+                      className="mt-1 w-24 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="flex flex-col text-xs text-slate-500">
+                    Ny saldo (valgfritt, i dag)
+                    <input
+                      value={editAccountBalance}
+                      onChange={(event) => setEditAccountBalance(event.target.value)}
+                      className="mt-1 w-32 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      placeholder="Uendret"
+                    />
+                  </label>
+                  <button type="submit" disabled={pending} className="rounded-full bg-slate-900 px-4 py-2 text-xs font-semibold text-white">
+                    Lagre
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingAccountId(null)}
+                    className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
+                  >
+                    Avbryt
+                  </button>
+                </form>
+              ) : null}
             </li>
           ))}
           {overview.accounts.length === 0 ? <li className="text-sm text-slate-500">Ingen kontoer registrert.</li> : null}
@@ -674,6 +839,13 @@ export function FinanceDashboard({ overview }: { overview: FinanceOverview }) {
                     className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200"
                   >
                     Rediger
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteCashFlow(cashFlow.seriesId, cashFlow.name)}
+                    className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-red-600 ring-1 ring-red-200"
+                  >
+                    Slett
                   </button>
                 </span>
               </div>

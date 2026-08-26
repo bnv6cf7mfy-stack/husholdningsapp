@@ -24,6 +24,7 @@ export type FinanceAccountSummary = {
   paymentEnabled: boolean;
   drawPriority: number;
   minimumBalance: number | null;
+  ownerMemberId: string | null;
   ownerName: string | null;
   latestBalance: number | null;
   latestBalanceDate: string | null;
@@ -62,10 +63,22 @@ export type FinanceChartMultiYearPoint = {
   closingBalance: number;
 };
 
+export const FELLES_MEMBER_KEY = "felles";
+
+export type FinanceMemberChartSeries = {
+  ownerKey: string;
+  ownerLabel: string;
+  month: FinanceChartMonthPoint[];
+  year: FinanceChartYearPoint[];
+  multiYear: FinanceChartMultiYearPoint[];
+};
+
 export type FinanceForecastChartData = {
   month: FinanceChartMonthPoint[];
   year: FinanceChartYearPoint[];
   multiYear: FinanceChartMultiYearPoint[];
+  /** Cumulative net contribution per household member (and "Felles"), independent of account balances. */
+  perMember: FinanceMemberChartSeries[];
 };
 
 export type FinanceForecastSummary = {
@@ -94,12 +107,140 @@ function lastDayOfMonthIso(year: number, monthIndexZeroBased: number): string {
   return new Date(Date.UTC(year, monthIndexZeroBased + 1, 0)).toISOString().slice(0, 10);
 }
 
+/**
+ * Computes, per household member (and a "Felles" bucket for unowned cash flows), the
+ * cumulative net contribution (income minus expense) over the same three windows as the
+ * household chart. This is not a real account balance — it shows the shape/trend of each
+ * member's own registered cash flows, since accounts are not attributed per member in v1.0
+ * (see docs/FINANCE_DOMAIN.md).
+ */
+async function getMemberCashFlowChartSeries(
+  adminSupabase: ReturnType<typeof createAdminSupabaseClient>,
+  householdId: string,
+  forecastStart: string,
+  forecastEnd: string,
+  members: { id: string; displayName: string }[]
+): Promise<FinanceMemberChartSeries[]> {
+  const [startYear, startMonth] = forecastStart.split("-").map(Number);
+  const monthStart = `${startYear}-${String(startMonth).padStart(2, "0")}-01`;
+  const monthEnd = lastDayOfMonthIso(startYear, startMonth - 1);
+
+  const monthDates: string[] = [];
+  {
+    const cursor = new Date(`${monthStart}T00:00:00Z`);
+    const end = new Date(`${monthEnd}T00:00:00Z`);
+    while (cursor <= end) {
+      monthDates.push(cursor.toISOString().slice(0, 10));
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+  }
+
+  const yearMonthEndDates: string[] = [];
+  {
+    let y = startYear;
+    let m = startMonth - 1;
+    for (let i = 0; i < 12; i += 1) {
+      const candidate = lastDayOfMonthIso(y, m);
+      yearMonthEndDates.push(candidate <= forecastEnd ? candidate : forecastEnd);
+      m += 1;
+      if (m > 11) {
+        m = 0;
+        y += 1;
+      }
+    }
+  }
+
+  const endYear = Number(forecastEnd.slice(0, 4));
+  const multiYearDates: string[] = [];
+  for (let year = startYear; year <= endYear; year += 1) {
+    const candidate = `${year}-12-31`;
+    multiYearDates.push(candidate <= forecastEnd ? candidate : forecastEnd);
+  }
+
+  const checkpointDates = Array.from(new Set([...monthDates, ...yearMonthEndDates, ...multiYearDates])).sort();
+
+  // Paginate through every occurrence in the horizon: a plain unranged select would
+  // silently truncate at PostgREST's default row cap for long horizons.
+  const pageSize = 1000;
+  let offset = 0;
+  const occurrences: { date: string; ownerKey: string; amount: number }[] = [];
+
+  while (true) {
+    const { data, error } = await adminSupabase
+      .from("finance_cash_flow_occurrences")
+      .select("occurrence_date, signed_amount, finance_cash_flow_definitions(owner_member_id)")
+      .eq("household_id", householdId)
+      .gte("occurrence_date", forecastStart)
+      .lte("occurrence_date", forecastEnd)
+      .order("occurrence_date", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (error || !data || data.length === 0) break;
+
+    for (const row of data) {
+      const definition = row.finance_cash_flow_definitions as unknown as { owner_member_id: string | null } | null;
+      occurrences.push({
+        date: row.occurrence_date,
+        ownerKey: definition?.owner_member_id ?? FELLES_MEMBER_KEY,
+        amount: Number(row.signed_amount)
+      });
+    }
+
+    if (data.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  const ownerOptions = [
+    ...members.map((member) => ({ key: member.id, label: member.displayName })),
+    { key: FELLES_MEMBER_KEY, label: "Felles" }
+  ];
+
+  const runningTotal = new Map<string, number>(ownerOptions.map((owner) => [owner.key, 0]));
+  const snapshotsByDate = new Map<string, Map<string, number>>();
+
+  let occurrenceIndex = 0;
+  for (const checkpoint of checkpointDates) {
+    while (occurrenceIndex < occurrences.length && occurrences[occurrenceIndex].date <= checkpoint) {
+      const occurrence = occurrences[occurrenceIndex];
+      runningTotal.set(occurrence.ownerKey, (runningTotal.get(occurrence.ownerKey) ?? 0) + occurrence.amount);
+      occurrenceIndex += 1;
+    }
+    snapshotsByDate.set(checkpoint, new Map(runningTotal));
+  }
+
+  const valueAt = (date: string, ownerKey: string) => snapshotsByDate.get(date)?.get(ownerKey) ?? 0;
+
+  return ownerOptions.map(({ key, label }) => {
+    let previousMonthValue = 0;
+    const month = monthDates.map((date) => {
+      const value = valueAt(date, key);
+      const point = { date, closingBalance: value, netCashFlow: value - previousMonthValue, isCritical: false };
+      previousMonthValue = value;
+      return point;
+    });
+
+    let previousYearValue = 0;
+    const year = yearMonthEndDates.map((date) => {
+      const value = valueAt(date, key);
+      const point = { month: date.slice(0, 7), closingBalance: value, netCashFlow: value - previousYearValue, isCritical: false };
+      previousYearValue = value;
+      return point;
+    });
+
+    const multiYear = multiYearDates.map((date) => ({ year: date.slice(0, 4), closingBalance: valueAt(date, key) }));
+
+    return { ownerKey: key, ownerLabel: label, month, year, multiYear };
+  });
+}
+
 /** Builds the (small, targeted) queries behind the month/year/multi-year forecast chart. */
 async function getForecastChartData(
   adminSupabase: ReturnType<typeof createAdminSupabaseClient>,
+  householdId: string,
   forecastRunId: string,
   forecastStart: string,
-  forecastEnd: string
+  forecastEnd: string,
+  members: { id: string; displayName: string }[]
 ): Promise<FinanceForecastChartData> {
   const [startYear, startMonth] = forecastStart.split("-").map(Number);
 
@@ -152,6 +293,8 @@ async function getForecastChartData(
     .in("forecast_date", Array.from(new Set(yearEndDates)))
     .order("forecast_date", { ascending: true });
 
+  const perMember = await getMemberCashFlowChartSeries(adminSupabase, householdId, forecastStart, forecastEnd, members);
+
   return {
     month: (monthRows ?? []).map((row) => ({
       date: row.forecast_date,
@@ -163,7 +306,8 @@ async function getForecastChartData(
     multiYear: (multiYearRows ?? []).map((row) => ({
       year: row.forecast_date.slice(0, 4),
       closingBalance: Number(row.closing_balance)
-    }))
+    })),
+    perMember
   };
 }
 
@@ -230,6 +374,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
       paymentEnabled: account.payment_enabled,
       drawPriority: account.draw_priority,
       minimumBalance: account.minimum_balance != null ? Number(account.minimum_balance) : null,
+      ownerMemberId: account.owner_member_id,
       ownerName: account.owner_member_id ? (memberNameByMemberId.get(account.owner_member_id) ?? null) : null,
       latestBalance: snapshot ? Number(snapshot.balance) : null,
       latestBalanceDate: snapshot ? snapshot.balance_date : null
@@ -271,7 +416,18 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
     const minimumRequiredBuffer = computeMinimumRequiredBuffer([lowestBalance]);
     const recommendedBuffer = computeRecommendedBuffer(minimumRequiredBuffer);
 
-    const chart = await getForecastChartData(adminSupabase, latestRun.id, latestRun.forecast_start, latestRun.forecast_end);
+    const memberOptionsForChart = (members ?? []).map((member) => ({
+      id: member.id,
+      displayName: memberNameByMemberId.get(member.id) ?? "Ukjent"
+    }));
+    const chart = await getForecastChartData(
+      adminSupabase,
+      membership.householdId,
+      latestRun.id,
+      latestRun.forecast_start,
+      latestRun.forecast_end,
+      memberOptionsForChart
+    );
 
     forecast = {
       forecastRunId: latestRun.id,
