@@ -357,29 +357,33 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
 
   const categoryNameById = new Map((categories ?? []).map((category) => [category.id, category.name]));
 
-  const accountSummaries: FinanceAccountSummary[] = [];
-  for (const account of accounts ?? []) {
-    const { data: snapshot } = await adminSupabase
-      .from("finance_account_balance_snapshots")
-      .select("balance, balance_date")
-      .eq("account_id", account.id)
-      .order("balance_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  // Fetch each account's latest balance snapshot in parallel instead of one
+  // sequential round-trip per account (previously an N+1 pattern that made the
+  // whole dashboard noticeably slower to refresh as households add accounts).
+  const accountSummaries: FinanceAccountSummary[] = await Promise.all(
+    (accounts ?? []).map(async (account) => {
+      const { data: snapshot } = await adminSupabase
+        .from("finance_account_balance_snapshots")
+        .select("balance, balance_date")
+        .eq("account_id", account.id)
+        .order("balance_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    accountSummaries.push({
-      id: account.id,
-      name: account.name,
-      accountType: account.account_type,
-      paymentEnabled: account.payment_enabled,
-      drawPriority: account.draw_priority,
-      minimumBalance: account.minimum_balance != null ? Number(account.minimum_balance) : null,
-      ownerMemberId: account.owner_member_id,
-      ownerName: account.owner_member_id ? (memberNameByMemberId.get(account.owner_member_id) ?? null) : null,
-      latestBalance: snapshot ? Number(snapshot.balance) : null,
-      latestBalanceDate: snapshot ? snapshot.balance_date : null
-    });
-  }
+      return {
+        id: account.id,
+        name: account.name,
+        accountType: account.account_type,
+        paymentEnabled: account.payment_enabled,
+        drawPriority: account.draw_priority,
+        minimumBalance: account.minimum_balance != null ? Number(account.minimum_balance) : null,
+        ownerMemberId: account.owner_member_id,
+        ownerName: account.owner_member_id ? (memberNameByMemberId.get(account.owner_member_id) ?? null) : null,
+        latestBalance: snapshot ? Number(snapshot.balance) : null,
+        latestBalanceDate: snapshot ? snapshot.balance_date : null
+      };
+    })
+  );
 
   const { data: latestRun } = await adminSupabase
     .from("finance_forecast_runs")
