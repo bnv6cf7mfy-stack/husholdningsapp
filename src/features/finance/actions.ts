@@ -16,7 +16,7 @@ import {
   deleteFinanceAccountSchema,
   deleteFinanceCashFlowSchema,
   editFinanceAccountSchema,
-  reviseFinanceCashFlowSchema
+  updateFinanceCashFlowSchema
 } from "./schemas";
 import { runForecastForHousehold } from "@/services/finance-forecast-service";
 import type { z } from "zod";
@@ -307,11 +307,12 @@ export async function createFinanceCashFlowAction(input: unknown): Promise<Finan
 
 /**
  * "Endre denne og fremtidige forekomster": closes the active definition the day
- * before `effectiveFrom` and creates a new version on the same series. Historical
- * occurrences already generated are preserved untouched (see docs/FINANCE_DOMAIN.md).
+ * before `effectiveFrom` and creates a new version on the same series with the
+ * (possibly changed) fields. Historical occurrences already generated are
+ * preserved untouched (see docs/FINANCE_DOMAIN.md).
  */
-export async function reviseFinanceCashFlowAction(input: unknown): Promise<FinanceActionResult> {
-  const parsed = reviseFinanceCashFlowSchema.safeParse(input);
+export async function updateFinanceCashFlowAction(input: unknown): Promise<FinanceActionResult> {
+  const parsed = updateFinanceCashFlowSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: describeParseError(parsed, "Ugyldig endring.") };
   }
@@ -321,12 +322,21 @@ export async function reviseFinanceCashFlowAction(input: unknown): Promise<Finan
     return { ok: false, error: "Ingen aktiv husholdning." };
   }
 
+  const data = parsed.data;
+
+  if (!(await assertMemberBelongsToHousehold(data.ownerMemberId, context.householdId))) {
+    return { ok: false, error: "Eier tilhører ikke husholdningen." };
+  }
+  if (!(await assertCategoryBelongsToHousehold(data.categoryId, context.householdId))) {
+    return { ok: false, error: "Kategori tilhører ikke husholdningen." };
+  }
+
   const adminSupabase = createAdminSupabaseClient();
 
   const { data: activeDefinition } = await adminSupabase
     .from("finance_cash_flow_definitions")
-    .select("*")
-    .eq("series_id", parsed.data.seriesId)
+    .select("id, series_id, version_number, valid_from, assumption_series_id, floor_rate, cap_rate, apply_in_base_year")
+    .eq("series_id", data.seriesId)
     .eq("household_id", context.householdId)
     .eq("is_active", true)
     .maybeSingle();
@@ -335,7 +345,7 @@ export async function reviseFinanceCashFlowAction(input: unknown): Promise<Finan
     return { ok: false, error: "Fant ikke aktiv kontantstrøm." };
   }
 
-  const dayBefore = new Date(`${parsed.data.effectiveFrom}T00:00:00Z`);
+  const dayBefore = new Date(`${data.effectiveFrom}T00:00:00Z`);
   dayBefore.setUTCDate(dayBefore.getUTCDate() - 1);
   const validToPreviousVersion = dayBefore.toISOString().slice(0, 10);
 
@@ -352,21 +362,20 @@ export async function reviseFinanceCashFlowAction(input: unknown): Promise<Finan
     household_id: context.householdId,
     series_id: activeDefinition.series_id,
     version_number: activeDefinition.version_number + 1,
-    cash_flow_type: activeDefinition.cash_flow_type,
-    category_id: activeDefinition.category_id,
-    name: activeDefinition.name,
-    description: activeDefinition.description,
-    base_amount: parsed.data.baseAmount,
-    owner_member_id: activeDefinition.owner_member_id,
-    valid_from: parsed.data.effectiveFrom,
-    valid_to: null,
-    recurrence_type: activeDefinition.recurrence_type,
-    day_of_month: activeDefinition.day_of_month,
-    month_of_year: activeDefinition.month_of_year,
-    quarter_start_month: activeDefinition.quarter_start_month,
-    adjustment_type: activeDefinition.adjustment_type,
+    cash_flow_type: data.cashFlowType,
+    category_id: data.categoryId ?? null,
+    name: data.name,
+    base_amount: data.baseAmount,
+    owner_member_id: data.ownerMemberId,
+    valid_from: data.effectiveFrom,
+    valid_to: data.validTo ?? null,
+    recurrence_type: data.recurrenceType,
+    day_of_month: data.dayOfMonth ?? null,
+    month_of_year: data.monthOfYear ?? null,
+    quarter_start_month: data.quarterStartMonth ?? null,
+    adjustment_type: data.adjustmentType,
     assumption_series_id: activeDefinition.assumption_series_id,
-    margin_rate: activeDefinition.margin_rate,
+    margin_rate: data.adjustmentType === "fixed_annual_percent" ? (data.fixedAnnualPercent ?? 0) : null,
     floor_rate: activeDefinition.floor_rate,
     cap_rate: activeDefinition.cap_rate,
     apply_in_base_year: activeDefinition.apply_in_base_year,

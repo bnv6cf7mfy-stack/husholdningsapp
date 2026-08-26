@@ -2,7 +2,7 @@
 // view models the /finance dashboard needs (read-model principle: nothing
 // here is a second source of truth, it is derived from the latest forecast run).
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { getCurrentMembership } from "@/features/household/queries";
+import { getCurrentMembership, getCurrentProfileId } from "@/features/household/queries";
 import { computeMinimumRequiredBuffer, computeRecommendedBuffer } from "./domain/buffer-policy";
 
 export type FinanceHouseholdMemberOption = {
@@ -36,9 +36,15 @@ export type FinanceCashFlowSummary = {
   name: string;
   cashFlowType: "income" | "expense";
   baseAmount: number;
+  categoryId: string | null;
   categoryName: string | null;
   recurrenceType: string;
+  dayOfMonth: number | null;
+  monthOfYear: number | null;
+  quarterStartMonth: number | null;
   adjustmentType: string;
+  marginRate: number | null;
+  ownerMemberId: string | null;
   ownerName: string | null;
   validFrom: string;
   validTo: string | null;
@@ -96,6 +102,7 @@ export type FinanceForecastSummary = {
 export type FinanceOverview = {
   householdId: string;
   householdName: string;
+  currentMemberId: string | null;
   categories: FinanceCategoryOption[];
   accounts: FinanceAccountSummary[];
   cashFlows: FinanceCashFlowSummary[];
@@ -333,7 +340,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
     adminSupabase
       .from("finance_cash_flow_definitions")
       .select(
-        "id, series_id, name, cash_flow_type, base_amount, category_id, recurrence_type, adjustment_type, owner_member_id, valid_from, valid_to"
+        "id, series_id, name, cash_flow_type, base_amount, category_id, recurrence_type, day_of_month, month_of_year, quarter_start_month, adjustment_type, margin_rate, owner_member_id, valid_from, valid_to"
       )
       .eq("household_id", membership.householdId)
       .eq("is_active", true)
@@ -356,6 +363,9 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
   );
 
   const categoryNameById = new Map((categories ?? []).map((category) => [category.id, category.name]));
+
+  const currentProfileId = await getCurrentProfileId();
+  const currentMemberId = (members ?? []).find((member) => member.user_id === currentProfileId)?.id ?? null;
 
   // Fetch each account's latest balance snapshot in parallel instead of one
   // sequential round-trip per account (previously an N+1 pattern that made the
@@ -449,6 +459,7 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
   return {
     householdId: membership.householdId,
     householdName: membership.householdName,
+    currentMemberId,
     categories: (categories ?? []).map((category) => ({
       id: category.id,
       name: category.name,
@@ -462,9 +473,15 @@ export async function getFinanceOverview(): Promise<FinanceOverview | null> {
       name: definition.name,
       cashFlowType: definition.cash_flow_type,
       baseAmount: Number(definition.base_amount),
+      categoryId: definition.category_id,
       categoryName: definition.category_id ? (categoryNameById.get(definition.category_id) ?? null) : null,
       recurrenceType: definition.recurrence_type,
+      dayOfMonth: definition.day_of_month,
+      monthOfYear: definition.month_of_year,
+      quarterStartMonth: definition.quarter_start_month,
       adjustmentType: definition.adjustment_type,
+      marginRate: definition.margin_rate != null ? Number(definition.margin_rate) : null,
+      ownerMemberId: definition.owner_member_id,
       ownerName: definition.owner_member_id ? (memberNameByMemberId.get(definition.owner_member_id) ?? null) : null,
       validFrom: definition.valid_from,
       validTo: definition.valid_to

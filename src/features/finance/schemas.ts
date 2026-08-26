@@ -61,7 +61,7 @@ export const createFinanceCashFlowSchema = z
     name: z.string().trim().min(1).max(160),
     description: z.string().trim().max(2000).nullable().optional(),
     baseAmount: z.number().min(0),
-    ownerMemberId: z.string().uuid().nullable().optional(),
+    ownerMemberId: z.string().uuid({ message: "Velg hvem posten gjelder for" }),
     validFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato"),
     validTo: z
       .string()
@@ -102,11 +102,35 @@ export const createFinanceCashFlowSchema = z
     path: ["specificDates"]
   });
 
-export const reviseFinanceCashFlowSchema = z.object({
-  seriesId: z.string().uuid(),
-  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato"),
-  baseAmount: z.number().min(0)
-});
+export const updateFinanceCashFlowSchema = z
+  .object({
+    seriesId: z.string().uuid(),
+    effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato"),
+    cashFlowType: financeCashFlowTypeSchema,
+    categoryId: z.string().uuid().nullable().optional(),
+    name: z.string().trim().min(1).max(160),
+    baseAmount: z.number().min(0),
+    ownerMemberId: z.string().uuid({ message: "Velg hvem posten gjelder for" }),
+    validTo: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Ugyldig dato")
+      .nullable()
+      .optional(),
+    recurrenceType: financeRecurrenceTypeSchema,
+    dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+    monthOfYear: z.number().int().min(1).max(12).nullable().optional(),
+    quarterStartMonth: z.number().int().min(1).max(3).nullable().optional(),
+    adjustmentType: financeAdjustmentTypeSchema.default("none"),
+    fixedAnnualPercent: z.number().nullable().optional()
+  })
+  .refine((value) => value.recurrenceType !== "monthly" || value.dayOfMonth != null, {
+    message: "Månedlig gjentakelse krever dag i måneden",
+    path: ["dayOfMonth"]
+  })
+  .refine((value) => value.recurrenceType !== "annual" || (value.dayOfMonth != null && value.monthOfYear != null), {
+    message: "Årlig gjentakelse krever måned og dag",
+    path: ["monthOfYear"]
+  });
 
 export const deleteFinanceCashFlowSchema = z.object({
   seriesId: z.string().uuid()
@@ -118,5 +142,5 @@ export type EditFinanceAccountInput = z.infer<typeof editFinanceAccountSchema>;
 export type DeleteFinanceAccountInput = z.infer<typeof deleteFinanceAccountSchema>;
 export type CreateFinanceCategoryInput = z.infer<typeof createFinanceCategorySchema>;
 export type CreateFinanceCashFlowInput = z.infer<typeof createFinanceCashFlowSchema>;
-export type ReviseFinanceCashFlowInput = z.infer<typeof reviseFinanceCashFlowSchema>;
+export type UpdateFinanceCashFlowInput = z.infer<typeof updateFinanceCashFlowSchema>;
 export type DeleteFinanceCashFlowInput = z.infer<typeof deleteFinanceCashFlowSchema>;
