@@ -5,7 +5,7 @@ import { FileText, FolderOpen, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { createBallerudDocumentUploadAction, registerBallerudDocumentAction } from "@/features/ballerud/document-actions";
-import { documentCategories, type BallerudDocument, type DocumentCategory } from "@/features/ballerud/documents";
+import { documentCategories, type BallerudDocument, type DocumentCategory } from "@/features/ballerud/document-types";
 
 export function DocumentArchive({ documents }: { documents: BallerudDocument[] }) {
   const router = useRouter();

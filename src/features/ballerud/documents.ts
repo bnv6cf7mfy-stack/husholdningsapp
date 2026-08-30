@@ -1,25 +1,8 @@
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getCurrentMembership } from "@/features/household/queries";
+import type { BallerudDocument, DocumentCategory } from "@/features/ballerud/document-types";
 
-export const documentCategories = {
-  plan: "Plantegning",
-  electrical: "Elektro",
-  selection: "Tilvalg",
-  prospect: "Prospekt",
-  contract: "Kontrakt",
-  other: "Annet"
-} as const;
-
-export type DocumentCategory = keyof typeof documentCategories;
-
-export type BallerudDocument = {
-  id: string;
-  title: string;
-  category: DocumentCategory;
-  fileName: string;
-  createdAt: string;
-  url: string;
-};
+export type { BallerudDocument } from "@/features/ballerud/document-types";
 
 export async function getBallerudDocuments(): Promise<BallerudDocument[] | null> {
   const membership = await getCurrentMembership();
