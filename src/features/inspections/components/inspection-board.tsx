@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Camera, Check, ClipboardCheck, ImagePlus, Save } from "lucide-react";
-import { createBallerudInspectionAction, createInspectionPhotoUploadAction, registerInspectionPhotoAction, updateInspectionCheckpointAction } from "@/features/inspections/actions";
+import { createBallerudInspectionAction, createInspectionPhotoUploadAction, registerInspectionPhotoAction, updateInspectionCheckpointCheckedAction, updateInspectionCheckpointNoteAction } from "@/features/inspections/actions";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import type { InspectionData } from "@/features/inspections/queries";
@@ -22,6 +22,17 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
   const [notes, setNotes] = useState<Record<string, string>>(
     Object.fromEntries(inspection?.rooms.flatMap((room) => room.checkpoints.map((checkpoint) => [checkpoint.id, checkpoint.note ?? ""])) ?? [])
   );
+
+  useEffect(() => {
+    setCheckedCheckpointIds(new Set(inspection?.rooms.flatMap((room) => room.checkpoints.filter((checkpoint) => checkpoint.checkedAt).map((checkpoint) => checkpoint.id)) ?? []));
+    setNotes(Object.fromEntries(inspection?.rooms.flatMap((room) => room.checkpoints.map((checkpoint) => [checkpoint.id, checkpoint.note ?? ""])) ?? []));
+  }, [inspection]);
+
+  useEffect(() => {
+    const refreshInspection = () => router.refresh();
+    window.addEventListener("focus", refreshInspection);
+    return () => window.removeEventListener("focus", refreshInspection);
+  }, [router]);
 
   if (!inspection) {
     return (
@@ -50,8 +61,7 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
       const formData = new FormData();
       formData.set("id", id);
       formData.set("checked", String(checked));
-      formData.set("note", notes[id] ?? "");
-      const result = await updateInspectionCheckpointAction(formData);
+      const result = await updateInspectionCheckpointCheckedAction(formData);
       if (!result.ok) {
         setCheckedCheckpointIds((previous) => {
           const next = new Set(previous);
@@ -68,9 +78,8 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
     startTransition(async () => {
       const formData = new FormData();
       formData.set("id", id);
-      formData.set("checked", String(checkedCheckpointIds.has(id)));
       formData.set("note", notes[id] ?? "");
-      const result = await updateInspectionCheckpointAction(formData);
+      const result = await updateInspectionCheckpointNoteAction(formData);
       setNoteStatus((previous) => ({ ...previous, [id]: result.ok ? "saved" : "error" }));
       if (result.ok) router.refresh();
     });
