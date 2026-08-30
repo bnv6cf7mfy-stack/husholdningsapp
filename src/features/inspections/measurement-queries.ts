@@ -9,7 +9,7 @@ export type InspectionMeasurement = {
   heightCm: number | null;
   depthCm: number | null;
   note: string | null;
-  photoUrl: string | null;
+  photos: Array<{ id: string; url: string }>;
 };
 
 export type MeasurementRoom = {
@@ -50,7 +50,9 @@ export async function getInspectionMeasurementData(): Promise<MeasurementData | 
         .in("room_id", roomIds)
         .order("created_at", { ascending: false })
     : { data: [] };
-  const photoPaths = (measurements ?? []).flatMap((measurement) => measurement.photo_path ? [measurement.photo_path] : []);
+  const measurementIds = (measurements ?? []).map((measurement) => measurement.id);
+  const { data: photos } = measurementIds.length ? await supabase.from("inspection_measurement_photos").select("id, measurement_id, storage_path").in("measurement_id", measurementIds).order("created_at") : { data: [] };
+  const photoPaths = (photos ?? []).map((photo) => photo.storage_path);
   const { data: signedPhotos } = photoPaths.length
     ? await supabase.storage.from("inspection-media").createSignedUrls(photoPaths, 60 * 60)
     : { data: [] };
@@ -71,7 +73,7 @@ export async function getInspectionMeasurementData(): Promise<MeasurementData | 
         heightCm: measurement.height_cm,
         depthCm: measurement.depth_cm,
         note: measurement.note,
-        photoUrl: measurement.photo_path ? photoUrls.get(measurement.photo_path) ?? null : null
+        photos: (photos ?? []).flatMap((photo) => photo.measurement_id === measurement.id && photoUrls.get(photo.storage_path) ? [{ id: photo.id, url: photoUrls.get(photo.storage_path)! }] : [])
       }))
     }))
   };

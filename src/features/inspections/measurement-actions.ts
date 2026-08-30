@@ -95,8 +95,14 @@ export async function attachMeasurementPhotoAction(input: unknown) {
   const membership = await getCurrentMembership();
   if (!parsed.success || !membership || !parsed.data.storagePath.startsWith(`${membership.householdId}/`)) return { ok: false };
   const supabase = createAdminSupabaseClient();
-  const { error } = await supabase.from("inspection_measurements").update({ photo_path: parsed.data.storagePath })
-    .eq("id", parsed.data.measurementId).eq("household_id", membership.householdId);
+  const profileId = await getCurrentProfileId();
+  if (!profileId) return { ok: false };
+  const { error } = await supabase.from("inspection_measurement_photos").insert({
+    household_id: membership.householdId,
+    measurement_id: parsed.data.measurementId,
+    storage_path: parsed.data.storagePath,
+    created_by: profileId
+  });
   revalidatePath("/ballerud/oppmaling");
   return { ok: !error };
 }
@@ -112,13 +118,19 @@ export async function deleteInspectionMeasurementAction(measurementId: string) {
     .eq("household_id", membership.householdId)
     .maybeSingle();
   if (!measurement) return { ok: false };
+  const { data: photos } = await supabase
+    .from("inspection_measurement_photos")
+    .select("storage_path")
+    .eq("measurement_id", measurementId)
+    .eq("household_id", membership.householdId);
   const { error } = await supabase
     .from("inspection_measurements")
     .delete()
     .eq("id", measurementId)
     .eq("household_id", membership.householdId);
   if (error) return { ok: false };
-  if (measurement.photo_path) await supabase.storage.from("inspection-media").remove([measurement.photo_path]);
+  const storagePaths = Array.from(new Set([measurement.photo_path, ...(photos ?? []).map((photo) => photo.storage_path)].filter(Boolean)));
+  if (storagePaths.length) await supabase.storage.from("inspection-media").remove(storagePaths);
   revalidatePath("/ballerud/oppmaling");
   return { ok: true };
 }
