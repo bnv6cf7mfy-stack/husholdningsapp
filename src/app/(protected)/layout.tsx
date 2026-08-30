@@ -18,6 +18,7 @@ const navigationItems = [
   { href: "/messages" as Route, label: "Meldinger" },
   { href: "/calendar" as Route, label: "Kalender" },
   { href: "/recipes" as Route, label: "Oppskrifter" },
+  { href: "/ballerud" as Route, label: "Ballerud" },
   { href: "/development" as Route, label: "Utvikling", enabled: false, badge: "Kommer snart" },
   { href: "/finance" as Route, label: "Økonomi" },
   { href: "/children" as Route, label: "Barn", enabled: false, badge: "Kommer snart" },
