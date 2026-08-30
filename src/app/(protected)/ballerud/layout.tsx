@@ -8,6 +8,7 @@ export default function BallerudLayout({ children }: { children: React.ReactNode
         <div className="mx-auto flex min-w-max gap-5 px-4 sm:max-w-6xl sm:px-6">
           <Link href={"/ballerud" as Route} className="shrink-0 border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary">Plan og aktiviteter</Link>
           <Link href={"/ballerud/ferdigbefaring" as Route} className="shrink-0 border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary">Ferdigbefaring</Link>
+          <Link href={"/ballerud/oppmaling" as Route} className="shrink-0 border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary">Oppmåling</Link>
           <Link href={"/ballerud/dokumenter" as Route} className="shrink-0 border-b-2 border-transparent px-1 py-3 text-sm font-semibold text-slate-700 hover:border-primary hover:text-primary">Dokumenter</Link>
         </div>
       </nav>
