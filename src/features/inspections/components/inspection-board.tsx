@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Camera, Check, ClipboardCheck, ImagePlus, Save } from "lucide-react";
-import { createBallerudInspectionAction, createInspectionPhotoUploadAction, registerInspectionPhotoAction, updateInspectionCheckpointCheckedAction, updateInspectionCheckpointNoteAction } from "@/features/inspections/actions";
+import { Camera, Check, ClipboardCheck, ImagePlus, Save, Trash2, X } from "lucide-react";
+import { createBallerudInspectionAction, createInspectionPhotoUploadAction, deleteInspectionPhotoAction, registerInspectionPhotoAction, updateInspectionCheckpointCheckedAction, updateInspectionCheckpointNoteAction } from "@/features/inspections/actions";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import type { InspectionData } from "@/features/inspections/queries";
@@ -21,6 +21,9 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
   const [uploadError, setUploadError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [photoCheckpointId, setPhotoCheckpointId] = useState<string | null>(null);
+  const [photoToDelete, setPhotoToDelete] = useState<{ id: string; fileName: string } | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletingPhoto, setDeletingPhoto] = useState(false);
   const [checkedCheckpointIds, setCheckedCheckpointIds] = useState<Set<string>>(
     new Set(inspection?.rooms.flatMap((room) => room.checkpoints.filter((checkpoint) => checkpoint.checkedAt).map((checkpoint) => checkpoint.id)) ?? [])
   );
@@ -175,6 +178,22 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
     }
   };
 
+  const deletePhoto = () => {
+    if (!photoToDelete || deleteConfirmation !== "SLETT") return;
+    setDeletingPhoto(true);
+    startTransition(async () => {
+      const result = await deleteInspectionPhotoAction(photoToDelete.id);
+      setDeletingPhoto(false);
+      if (!result.ok) {
+        setUploadError("Bildet kunne ikke slettes. Prov igjen.");
+        return;
+      }
+      setPhotoToDelete(null);
+      setDeleteConfirmation("");
+      router.refresh();
+    });
+  };
+
   const roomGroups = [
     { area: "ground_floor", label: "1. etasje" },
     { area: "upper_floor", label: "2. etasje" },
@@ -212,7 +231,7 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
                 <div className="mt-3 pl-11"><label className="block"><span className="sr-only">Observasjon eller mangel</span><textarea value={notes[checkpoint.id] ?? ""} onChange={(event) => { setNotes((previous) => ({ ...previous, [checkpoint.id]: event.target.value })); setDirtyNoteIds((previous) => new Set(previous).add(checkpoint.id)); setNoteStatus((previous) => ({ ...previous, [checkpoint.id]: "idle" })); }} placeholder="Observasjon / mangel..." rows={2} className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" /></label><div className="mt-2 flex items-center gap-2"><button type="button" onClick={() => saveNote(checkpoint.id)} disabled={noteStatus[checkpoint.id] === "saving"} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs font-semibold text-slate-700 disabled:opacity-60"><Save className="h-3.5 w-3.5" />{noteStatus[checkpoint.id] === "saving" ? "Lagrer..." : "Lagre notat"}</button>{noteStatus[checkpoint.id] === "saved" ? <span className="text-xs font-medium text-emerald-700">Lagret</span> : null}{noteStatus[checkpoint.id] === "error" ? <span className="text-xs font-medium text-red-700">Kunne ikke lagre</span> : null}</div></div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 pl-11">
                   <button type="button" onClick={() => selectPhoto(checkpoint.id)} disabled={uploadingCheckpointId === checkpoint.id} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"><Camera className="h-4 w-4" />{uploadingCheckpointId === checkpoint.id ? "Laster opp..." : "Ta bilde / velg bilde"}</button>
-                  {checkpoint.photos.map((photo) => <a key={photo.id} href={photo.url} target="_blank" rel="noreferrer" title={photo.fileName} className="block h-12 w-12 overflow-hidden rounded-md border border-slate-200"><img src={photo.url} alt={photo.caption ?? photo.fileName} className="h-full w-full object-cover" /></a>)}
+                  {checkpoint.photos.map((photo) => <div key={photo.id} className="relative h-12 w-12"><a href={photo.url} target="_blank" rel="noreferrer" title={photo.fileName} className="block h-full w-full overflow-hidden rounded-md border border-slate-200"><img src={photo.url} alt={photo.caption ?? photo.fileName} className="h-full w-full object-cover" /></a><button type="button" onClick={() => { setPhotoToDelete({ id: photo.id, fileName: photo.fileName }); setDeleteConfirmation(""); }} aria-label={`Slett ${photo.fileName}`} className="absolute -right-2 -top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border border-white bg-red-600 text-white shadow-sm"><Trash2 className="h-3.5 w-3.5" /></button></div>)}
                 </div>
               </article>
             ))}
@@ -222,6 +241,7 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
         </section>
       </div>
       <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/heic" capture="environment" multiple className="sr-only" onChange={(event) => { void uploadPhotos(event.target.files); event.target.value = ""; }} />
+      {photoToDelete ? <div className="fixed inset-0 z-50 flex items-end bg-slate-950/40 p-4 sm:items-center sm:justify-center" role="presentation"><section role="dialog" aria-modal="true" aria-labelledby="delete-photo-title" className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl"><div className="flex items-start justify-between gap-3"><div><h2 id="delete-photo-title" className="text-lg font-bold text-slate-900">Slette bilde permanent?</h2><p className="mt-2 text-sm leading-6 text-slate-600">Bildet <strong>{photoToDelete.fileName}</strong> fjernes fra befaringslisten og privat lagring. Dette kan ikke angres.</p></div><button type="button" onClick={() => setPhotoToDelete(null)} aria-label="Avbryt sletting" className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300"><X className="h-4 w-4" /></button></div><label className="mt-5 block"><span className="text-sm font-semibold text-slate-800">Skriv SLETT for å bekrefte</span><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value.toUpperCase())} autoComplete="off" className="mt-2 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-red-600" /></label><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setPhotoToDelete(null)} disabled={deletingPhoto} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Behold bilde</button><button type="button" onClick={deletePhoto} disabled={deleteConfirmation !== "SLETT" || deletingPhoto} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{deletingPhoto ? "Sletter..." : "Slett bilde"}</button></div></section></div> : null}
     </main>
   );
 }

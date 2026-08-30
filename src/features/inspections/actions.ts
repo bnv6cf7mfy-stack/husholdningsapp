@@ -178,3 +178,26 @@ export async function registerInspectionPhotoAction(input: unknown) {
   revalidatePath("/ferdigbefaring");
   return { ok: !error };
 }
+
+export async function deleteInspectionPhotoAction(photoId: string) {
+  const membership = await getCurrentMembership();
+  if (!membership || !z.string().uuid().safeParse(photoId).success) return { ok: false };
+  const supabase = createAdminSupabaseClient();
+  const { data: photo } = await supabase
+    .from("inspection_photos")
+    .select("storage_path")
+    .eq("id", photoId)
+    .eq("household_id", membership.householdId)
+    .maybeSingle();
+  if (!photo) return { ok: false };
+  const { error } = await supabase
+    .from("inspection_photos")
+    .delete()
+    .eq("id", photoId)
+    .eq("household_id", membership.householdId);
+  if (error) return { ok: false };
+  await supabase.storage.from("inspection-media").remove([photo.storage_path]);
+  revalidatePath("/ferdigbefaring");
+  revalidatePath("/ballerud/ferdigbefaring");
+  return { ok: true };
+}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/features/auth/actions";
+import { MobileNavigation } from "@/features/navigation/components/mobile-navigation";
 
 
 type NavigationItem = {
@@ -39,7 +40,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
     <div className="min-h-screen bg-slate-50">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 max-md:hidden">
             {navigationItems.map((item) => {
               const baseClasses =
                 "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition";
@@ -73,10 +74,11 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             })}
           </div>
           <form action={signOutAction}>
-            <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+            <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 max-md:hidden">
               Logg ut
             </button>
           </form>
+          <MobileNavigation items={navigationItems} />
         </div>
       </header>
       {children}
