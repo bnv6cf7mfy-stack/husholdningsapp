@@ -5,13 +5,15 @@ import { revalidatePath } from "next/cache";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { getCurrentMembership, getCurrentProfileId } from "@/features/household/queries";
 
+const centimeterValue = z.number().positive().refine((value) => Number.isInteger(value * 10), "Mål kan ha maksimalt én desimal.").nullable();
+
 const measurementSchema = z.object({
   roomId: z.string().uuid(),
   name: z.string().trim().min(1).max(160),
-  lengthCm: z.number().positive().nullable(),
-  widthCm: z.number().positive().nullable(),
-  heightCm: z.number().positive().nullable(),
-  depthCm: z.number().positive().nullable(),
+  lengthCm: centimeterValue,
+  widthCm: centimeterValue,
+  heightCm: centimeterValue,
+  depthCm: centimeterValue,
   note: z.string().trim().max(3000)
 });
 
