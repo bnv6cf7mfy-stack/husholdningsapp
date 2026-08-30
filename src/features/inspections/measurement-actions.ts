@@ -100,3 +100,25 @@ export async function attachMeasurementPhotoAction(input: unknown) {
   revalidatePath("/ballerud/oppmaling");
   return { ok: !error };
 }
+
+export async function deleteInspectionMeasurementAction(measurementId: string) {
+  const membership = await getCurrentMembership();
+  if (!membership || !z.string().uuid().safeParse(measurementId).success) return { ok: false };
+  const supabase = createAdminSupabaseClient();
+  const { data: measurement } = await supabase
+    .from("inspection_measurements")
+    .select("photo_path")
+    .eq("id", measurementId)
+    .eq("household_id", membership.householdId)
+    .maybeSingle();
+  if (!measurement) return { ok: false };
+  const { error } = await supabase
+    .from("inspection_measurements")
+    .delete()
+    .eq("id", measurementId)
+    .eq("household_id", membership.householdId);
+  if (error) return { ok: false };
+  if (measurement.photo_path) await supabase.storage.from("inspection-media").remove([measurement.photo_path]);
+  revalidatePath("/ballerud/oppmaling");
+  return { ok: true };
+}
