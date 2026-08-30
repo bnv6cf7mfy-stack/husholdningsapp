@@ -1,7 +1,7 @@
 export type InspectionTemplateRoom = {
   name: string;
   code: string;
-  checkpoints: Array<{ category: string; title: string }>;
+  checkpoints: Array<{ category: string; title: string; guidance?: string }>;
 };
 
 const surfaces = [
@@ -36,7 +36,7 @@ export const ballerudInspectionTemplate: InspectionTemplateRoom[] = [
   {
     ...standardRoom("WC", "WC"),
     checkpoints: [
-      { category: "Bad og WC", title: "Fall mot sluk og ingen vannansamling" },
+      { category: "Bad og WC", title: "Fall mot sluk og ingen vannansamling", guidance: "Spre litt vann pa gulvet. Vannet skal renne mot sluket uten a bli staende i pytter. Kontroller ogsa ved dor, vegg og i dusjsonen." },
       { category: "Bad og WC", title: "Fliser, fuging, silikon og sluk" },
       { category: "Bad og WC", title: "Vikingbad Ciba toalett og Riva 50 servant" },
       { category: "Bad og WC", title: "Tapwell VIC071 servantbatteri og DUO112 betjeningsplate" },
@@ -48,7 +48,9 @@ export const ballerudInspectionTemplate: InspectionTemplateRoom[] = [
     checkpoints: [
       { category: "Kjøkken", title: "Fronter, spalter, skuffer og soft-close" },
       { category: "Kjøkken", title: "Benkeplate Silestone Et Calacatta Gold 20 mm og skjøter" },
-      { category: "Kjøkken", title: "Blanco Andano 500-U vask, Arm887 Brushed Nickel og lekkasjer" },
+      { category: "Kjøkken", title: "Blanco Andano 500-U vask og lekkasjer" },
+      { category: "Kjøkken", title: "Kjokkenbatteri Arm887 Brushed Nickel med uttrekk", guidance: "Kontroller at riktig modell og overflate er levert. Test uttrekk, svingradius, kaldt/varmt vann og at det ikke lekker i skapet under vasken." },
+      { category: "Kjøkken", title: "Integrerte hvitevarer og korrekt modell", guidance: "Sammenhold med bestilling. Kontroller fronter, spalter, innfesting, funksjon og at mikro har egen kurs som avtalt." },
       { category: "Kjøkken", title: "Røros Slide Sense 80 ventilator og betjening" },
       { category: "Kjøkken", title: "Kontroller at Evoline Backflip er levert i korrekt bestilt utførelse/modell" },
       { category: "Elektro", title: "Downlights, dimmere, stikk og egen kurs til mikro" },
@@ -78,9 +80,10 @@ export const ballerudInspectionTemplate: InspectionTemplateRoom[] = [
   {
     ...standardRoom("Bad", "BAD"),
     checkpoints: [
-      { category: "Bad", title: "Fall mot sluk, vannansamlinger og stjernekapp i dusjsone" },
+      { category: "Bad", title: "Fall mot sluk, vannansamlinger og stjernekapp i dusjsone", guidance: "Spre litt vann pa gulvet. Vannet skal renne mot sluket uten a bli staende i pytter. Kontroller ogsa ved dor, vegg og i dusjsonen." },
       { category: "Bad", title: "Fliser, fuging, silikon, sluk og rørgjennomføringer" },
-      { category: "Bad", title: "Dusj, servant, toalett, blandebatteri og lekkasjer" },
+      { category: "Bad", title: "Dusj, servant, toalett, blandebatteri og lekkasjer", guidance: "Apne kaldt og varmt vann, la det renne noen minutter og kontroller koblinger, skap og gulv for fukt. Spyl toalettet flere ganger." },
+      { category: "Bad", title: "Vannfordelingsskap og rorgjennomforinger", guidance: "Kontroller at skap og rorgjennomforinger er tette, tilgjengelige og uten synlig fukt. Ta bilde av eventuelle avvik." },
       { category: "Bad", title: "Ventilasjon, termostat og gulvvarme" }
     ]
   },
@@ -117,7 +120,7 @@ export const ballerudInspectionTemplate: InspectionTemplateRoom[] = [
     ...standardRoom("Tekniske installasjoner", "TEKN"),
     checkpoints: [
       { category: "Elektro", title: "Sikringsskap, kursfortegnelse, nettverk og antall stikk" },
-      { category: "Ventilasjon og varme", title: "Ventiler, luftstrøm, aggregat, filter og betjening" },
+      { category: "Ventilasjon og varme", title: "Ventiler, luftstrøm, aggregat, filter og betjening", guidance: "Kontroller at aggregatet starter, at filter er montert og at dere far utlevert brukerveiledning og innstillingene." },
       { category: "Ventilasjon og varme", title: "Termostater og gulvvarme" }
     ]
   }

@@ -5,6 +5,7 @@ export type InspectionCheckpoint = {
   id: string;
   category: string;
   title: string;
+  guidance: string | null;
   checkedAt: string | null;
   note: string | null;
   photos: InspectionPhoto[];
@@ -56,7 +57,7 @@ export async function getLatestInspection(): Promise<InspectionData | null> {
   const { data: checkpoints } = roomIds.length
     ? await supabase
         .from("inspection_checkpoints")
-        .select("id, room_id, category, title, checked_at, note")
+        .select("id, room_id, category, title, guidance, checked_at, note")
         .in("room_id", roomIds)
         .order("sort_order")
     : { data: [] };
@@ -88,6 +89,7 @@ export async function getLatestInspection(): Promise<InspectionData | null> {
           id: checkpoint.id,
           category: checkpoint.category,
           title: checkpoint.title,
+          guidance: checkpoint.guidance,
           checkedAt: checkpoint.checked_at,
           note: checkpoint.note,
           photos: (photos ?? [])
