@@ -112,6 +112,25 @@ export async function updateInspectionCheckpointNoteAction(formData: FormData) {
   return { ok: !error };
 }
 
+// Supports inspection pages that were left open during the action split above.
+export async function updateInspectionCheckpointAction(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const checked = formData.get("checked") === "true";
+  const note = String(formData.get("note") ?? "").trim().slice(0, 3000);
+  const membership = await getCurrentMembership();
+  const profileId = await getCurrentProfileId();
+  if (!membership || !profileId || !id) return { ok: false };
+  const supabase = createAdminSupabaseClient();
+  const { error } = await supabase
+    .from("inspection_checkpoints")
+    .update({ checked_at: checked ? new Date().toISOString() : null, checked_by: checked ? profileId : null, note: note || null })
+    .eq("id", id)
+    .eq("household_id", membership.householdId);
+  revalidatePath("/ferdigbefaring");
+  revalidatePath("/ballerud/ferdigbefaring");
+  return { ok: !error };
+}
+
 export async function createInspectionPhotoUploadAction(input: unknown) {
   const parsed = photoUploadSchema.safeParse(input);
   const membership = await getCurrentMembership();
