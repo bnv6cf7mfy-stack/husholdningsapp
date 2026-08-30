@@ -14,7 +14,7 @@ const photoUploadSchema = z.object({
 });
 
 const areaByRoomCode: Record<string, "ground_floor" | "upper_floor" | "outdoor_storage"> = {
-  SOV2: "upper_floor", SOV3: "upper_floor", BAD: "upper_floor",
+  SOV2: "upper_floor", SOV3: "upper_floor", SOV4: "upper_floor", BOD2: "upper_floor", BAD2: "upper_floor", GANG2: "upper_floor", BALKONG: "upper_floor", BAD: "upper_floor",
   TERR: "outdoor_storage", HAGE: "outdoor_storage", FASADE: "outdoor_storage", BOD: "outdoor_storage", TEKN: "outdoor_storage"
 };
 

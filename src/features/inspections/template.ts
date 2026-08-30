@@ -77,6 +77,42 @@ export const ballerudInspectionTemplate: InspectionTemplateRoom[] = [
   standardRoom("Soverom 1", "SOV1"),
   standardRoom("Soverom 2", "SOV2"),
   standardRoom("Soverom 3", "SOV3"),
+  standardRoom("Soverom 4", "SOV4"),
+  {
+    ...standardRoom("Bod 2. etasje", "BOD2"),
+    checkpoints: [
+      { category: "Bod", title: "Gulv, vegger, tak og lister uten skader" },
+      { category: "Bod", title: "Dor, karm og handtak fungerer uten subbing" },
+      { category: "Bod", title: "Ventilasjon, fukt og eventuelle stikk" }
+    ]
+  },
+  {
+    ...standardRoom("Bad soverom 2", "BAD2"),
+    checkpoints: [
+      { category: "Bad", title: "Fall mot sluk og ingen vannansamling", guidance: "Spre litt vann pa gulvet. Vannet skal renne mot sluket uten a bli staende i pytter. Kontroller ogsa ved dor, vegg og i dusjsonen." },
+      { category: "Bad", title: "Fliser, fuging, silikon, sluk og rorgjennomforinger" },
+      { category: "Bad", title: "Dusj, servant, toalett, blandebatteri og lekkasjer", guidance: "Apne kaldt og varmt vann, la det renne noen minutter og kontroller koblinger, skap og gulv for fukt. Spyl toalettet flere ganger." },
+      { category: "Bad", title: "Ventilasjon, termostat og gulvvarme" },
+      { category: "Elektro", title: "Downlights, speilbelysning og IP-klassifiserte punkter" }
+    ]
+  },
+  {
+    ...standardRoom("Gang 2. etasje", "GANG2"),
+    checkpoints: [
+      ...standardRoom("Gang 2. etasje", "GANG2").checkpoints,
+      { category: "Elektro", title: "Downlights, lysdemper, brytere og stikk" },
+      { category: "Elektro", title: "Rokdetektor og lampepunkt" }
+    ]
+  },
+  {
+    ...standardRoom("Balkong ved soverom 3", "BALKONG"),
+    checkpoints: [
+      { category: "Utvendig", title: "Balkonggulv, fall og avrenning" },
+      { category: "Utvendig", title: "Rekkverk, innfesting og overflater" },
+      { category: "Dorer og vinduer", title: "Balkongdor, terskel, karm og tetting" },
+      { category: "Elektro", title: "Utebelysning og stikk dersom levert" }
+    ]
+  },
   {
     ...standardRoom("Bad", "BAD"),
     checkpoints: [
