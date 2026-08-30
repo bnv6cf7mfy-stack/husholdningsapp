@@ -50,6 +50,28 @@ export async function createInspectionMeasurementAction(input: unknown) {
   return data && !error ? { ok: true as const, measurementId: data.id } : { ok: false as const };
 }
 
+export async function updateInspectionMeasurementAction(input: unknown) {
+  const parsed = measurementSchema.extend({ measurementId: z.string().uuid() }).safeParse(input);
+  const membership = await getCurrentMembership();
+  if (!parsed.success || !membership) return { ok: false };
+  const supabase = createAdminSupabaseClient();
+  const { error } = await supabase
+    .from("inspection_measurements")
+    .update({
+      name: parsed.data.name,
+      length_cm: parsed.data.lengthCm,
+      width_cm: parsed.data.widthCm,
+      height_cm: parsed.data.heightCm,
+      depth_cm: parsed.data.depthCm,
+      note: parsed.data.note || null
+    })
+    .eq("id", parsed.data.measurementId)
+    .eq("room_id", parsed.data.roomId)
+    .eq("household_id", membership.householdId);
+  revalidatePath("/ballerud/oppmaling");
+  return { ok: !error };
+}
+
 export async function createMeasurementPhotoUploadAction(input: unknown) {
   const parsed = measurementPhotoSchema.safeParse(input);
   const membership = await getCurrentMembership();
