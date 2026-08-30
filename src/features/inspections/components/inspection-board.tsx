@@ -7,6 +7,12 @@ import { createBrowserSupabaseClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import type { InspectionData } from "@/features/inspections/queries";
 
+type RealtimeCheckpoint = {
+  id: string;
+  checked_at: string | null;
+  note: string | null;
+};
+
 export function InspectionBoard({ inspection }: { inspection: InspectionData | null }) {
   const router = useRouter();
   const [activeRoomId, setActiveRoomId] = useState(inspection?.rooms[0]?.id ?? "");
@@ -19,6 +25,8 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
     new Set(inspection?.rooms.flatMap((room) => room.checkpoints.filter((checkpoint) => checkpoint.checkedAt).map((checkpoint) => checkpoint.id)) ?? [])
   );
   const [noteStatus, setNoteStatus] = useState<Record<string, "idle" | "saving" | "saved" | "error">>({});
+  const [dirtyNoteIds, setDirtyNoteIds] = useState<Set<string>>(new Set());
+  const dirtyNoteIdsRef = useRef(dirtyNoteIds);
   const [notes, setNotes] = useState<Record<string, string>>(
     Object.fromEntries(inspection?.rooms.flatMap((room) => room.checkpoints.map((checkpoint) => [checkpoint.id, checkpoint.note ?? ""])) ?? [])
   );
@@ -33,6 +41,41 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
     window.addEventListener("focus", refreshInspection);
     return () => window.removeEventListener("focus", refreshInspection);
   }, [router]);
+
+  useEffect(() => {
+    dirtyNoteIdsRef.current = dirtyNoteIds;
+  }, [dirtyNoteIds]);
+
+  useEffect(() => {
+    if (!inspection) return;
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(`inspection-checkpoints-${inspection.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "inspection_checkpoints",
+          filter: `inspection_id=eq.${inspection.id}`
+        },
+        (payload) => {
+          const checkpoint = payload.new as RealtimeCheckpoint;
+          setCheckedCheckpointIds((previous) => {
+            const next = new Set(previous);
+            if (checkpoint.checked_at) next.add(checkpoint.id);
+            else next.delete(checkpoint.id);
+            return next;
+          });
+          setNotes((previous) => dirtyNoteIdsRef.current.has(checkpoint.id) ? previous : { ...previous, [checkpoint.id]: checkpoint.note ?? "" });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [inspection]);
 
   if (!inspection) {
     return (
@@ -81,7 +124,7 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
       formData.set("note", notes[id] ?? "");
       const result = await updateInspectionCheckpointNoteAction(formData);
       setNoteStatus((previous) => ({ ...previous, [id]: result.ok ? "saved" : "error" }));
-      if (result.ok) router.refresh();
+      if (result.ok) setDirtyNoteIds((previous) => { const next = new Set(previous); next.delete(id); return next; });
     });
   };
 
@@ -166,7 +209,7 @@ export function InspectionBoard({ inspection }: { inspection: InspectionData | n
                   <button type="button" aria-label={`Marker ${checkpoint.title} som kontrollert`} onClick={() => saveCheckpoint(checkpoint.id, !checkedCheckpointIds.has(checkpoint.id))} className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${checkedCheckpointIds.has(checkpoint.id) ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-300 bg-white text-transparent"}`}><Check className="h-5 w-5" /></button>
                   <div className="min-w-0 flex-1"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{checkpoint.category}</p><h3 className="mt-0.5 text-sm font-semibold leading-5 text-slate-900">{checkpoint.title}</h3>{checkpoint.guidance ? <p className="mt-2 text-xs leading-5 text-slate-600">{checkpoint.guidance}</p> : null}</div>
                 </div>
-                <div className="mt-3 pl-11"><label className="block"><span className="sr-only">Observasjon eller mangel</span><textarea value={notes[checkpoint.id] ?? ""} onChange={(event) => { setNotes((previous) => ({ ...previous, [checkpoint.id]: event.target.value })); setNoteStatus((previous) => ({ ...previous, [checkpoint.id]: "idle" })); }} placeholder="Observasjon / mangel..." rows={2} className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" /></label><div className="mt-2 flex items-center gap-2"><button type="button" onClick={() => saveNote(checkpoint.id)} disabled={noteStatus[checkpoint.id] === "saving"} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs font-semibold text-slate-700 disabled:opacity-60"><Save className="h-3.5 w-3.5" />{noteStatus[checkpoint.id] === "saving" ? "Lagrer..." : "Lagre notat"}</button>{noteStatus[checkpoint.id] === "saved" ? <span className="text-xs font-medium text-emerald-700">Lagret</span> : null}{noteStatus[checkpoint.id] === "error" ? <span className="text-xs font-medium text-red-700">Kunne ikke lagre</span> : null}</div></div>
+                <div className="mt-3 pl-11"><label className="block"><span className="sr-only">Observasjon eller mangel</span><textarea value={notes[checkpoint.id] ?? ""} onChange={(event) => { setNotes((previous) => ({ ...previous, [checkpoint.id]: event.target.value })); setDirtyNoteIds((previous) => new Set(previous).add(checkpoint.id)); setNoteStatus((previous) => ({ ...previous, [checkpoint.id]: "idle" })); }} placeholder="Observasjon / mangel..." rows={2} className="w-full resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" /></label><div className="mt-2 flex items-center gap-2"><button type="button" onClick={() => saveNote(checkpoint.id)} disabled={noteStatus[checkpoint.id] === "saving"} className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs font-semibold text-slate-700 disabled:opacity-60"><Save className="h-3.5 w-3.5" />{noteStatus[checkpoint.id] === "saving" ? "Lagrer..." : "Lagre notat"}</button>{noteStatus[checkpoint.id] === "saved" ? <span className="text-xs font-medium text-emerald-700">Lagret</span> : null}{noteStatus[checkpoint.id] === "error" ? <span className="text-xs font-medium text-red-700">Kunne ikke lagre</span> : null}</div></div>
                 <div className="mt-3 flex flex-wrap items-center gap-2 pl-11">
                   <button type="button" onClick={() => selectPhoto(checkpoint.id)} disabled={uploadingCheckpointId === checkpoint.id} className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"><Camera className="h-4 w-4" />{uploadingCheckpointId === checkpoint.id ? "Laster opp..." : "Ta bilde / velg bilde"}</button>
                   {checkpoint.photos.map((photo) => <a key={photo.id} href={photo.url} target="_blank" rel="noreferrer" title={photo.fileName} className="block h-12 w-12 overflow-hidden rounded-md border border-slate-200"><img src={photo.url} alt={photo.caption ?? photo.fileName} className="h-full w-full object-cover" /></a>)}
