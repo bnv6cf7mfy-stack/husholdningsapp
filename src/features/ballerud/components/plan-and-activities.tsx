@@ -4,7 +4,8 @@ const milestones = [
   { date: "30. aug.", title: "Forberedelse", detail: "Sjekkliste, dokumenter og måleverktøy klare", icon: PackageCheck, state: "active" },
   { date: "1. sep. 10:00", title: "Ferdigbefaring", detail: "Rom-for-rom kontroll og dokumentasjon", icon: CalendarCheck, state: "next" },
   { date: "17. sep. 10:00", title: "Overtagelse", detail: "Nøkler, protokoll og måleravlesning", icon: CheckCircle2, state: "future" },
-  { date: "24.-30. sep.", title: "Klargjør Ballerud", detail: "Innkjøp, montering og innflyttingsklart hjem", icon: Sparkles, state: "future" },
+  { date: "18. sep. 08:00-13:00", title: "Hvitevarelevering", detail: "Mottak, kontroll og klargjøring for montering", icon: PackageCheck, state: "future" },
+  { date: "17.-30. sep.", title: "Klargjør Ballerud", detail: "Montering, interiør og innflyttingsklart hjem", icon: Sparkles, state: "future" },
   { date: "1. okt. 12:00", title: "Overtagelse Silurveien 8A", detail: "Utvask, nøkkeloverlevering og sluttkontroll", icon: Truck, state: "future" }
 ] as const;
 
@@ -12,13 +13,20 @@ const activities = [
   ["Sjekk ferdigbefaring", "Lad telefon, ta med målebånd, lader og åpne Ballerud-sjekklisten.", "1. sep. 09:30", "Young og Vilde", "Ikke startet"],
   ["Send befaringstilbakemelding", "Oppsummer observasjoner og send dokumentasjon til utbygger etter befaring.", "2. sep.", "Young", "Ikke startet"],
   ["Bestill løsning under trapp", "Bruk registrerte mål, avklar strøm og velg leverandør for plassbygget løsning.", "5. sep.", "Vilde", "Ikke startet"],
-  ["Bestill hvitevarer og montering", "Bekreft modell, leveringstid, tilkobling og innbæring før overtagelse.", "8. sep.", "Young", "Ikke startet"],
+  ["Bekreft hvitevarelevering", "Bekreft levering 18. september kl. 08:00-13:00, innbæring, modeller og hvem som mottar varene.", "12. sep.", "Young", "Ikke startet"],
   ["Pakk: sjelden brukt", "Bøker, dekor, sesongtøy, bod, gjesterom og alt som ikke trengs før overtagelse.", "10. sep.", "Begge", "Ikke startet"],
   ["Planlegg utvask Silurveien", "Bestill vask eller fordel rom, kjøp utstyr og avtal tidspunkt for sluttkontroll.", "12. sep.", "Vilde", "Ikke startet"],
   ["Før overtagelse", "Bestill internett, forsikring, adresseendring og strømflytting. Avklar nøkler og målere.", "16. sep.", "Young", "Ikke startet"],
   ["Overtagelse Ballerud", "Gå gjennom protokoll, dokumenter målerstand og motta alle nøkler.", "17. sep. 10:00", "Begge", "Milepæl"],
-  ["Pakk: dagligvarer og kjøkken", "Pakk det som brukes daglig etter overtagelse, men behold flytteeske for første døgn separat.", "18.-22. sep.", "Begge", "Ikke startet"],
-  ["Klargjør Ballerud", "Monter hvitevarer, innkjøp av lamper og praktisk interiør, og plasser det viktigste før flytting.", "24.-30. sep.", "Begge", "Ikke startet"],
+  ["Forbered Ballerud for levering", "Frigi plass ved kjøkkenet, kontroller at strøm og vann er klart, og ha kontroll på emballasje og avfall.", "17. sep.", "Begge", "Ikke startet"],
+  ["Motta hvitevarer", "Kontroller antall, modell og synlige transportskader før mottak signeres. Ta bilde av eventuelle avvik.", "18. sep. 08:00-13:00", "Begge", "Milepæl"],
+  ["Installer hvitevarer", "Monter hvitevarer som kan settes i drift samme dag. La kjøl/frys som har vært transportert liggende, stå oppreist etter leverandørens anvisning før strøm tilkobles.", "18.-19. sep.", "Begge", "Ikke startet"],
+  ["Klargjør kjøkken og bad", "Monter innredning som er klar, organiser skuffer og skap, og legg frem nødvendige varer for første uke.", "18.-22. sep.", "Begge", "Ikke startet"],
+  ["Monter lamper og praktisk elektro", "Monter avtalte lamper og test hvert punkt. Følg sikker monteringspraksis og bruk elektriker der arbeidet krever det.", "19.-26. sep.", "Young", "Ikke startet"],
+  ["Monter garderober og oppbevaring", "Mål nisjer på nytt mot plan, monter garderober og prioriter oppbevaring som trengs fra første flyttedag.", "20.-27. sep.", "Begge", "Ikke startet"],
+  ["Bestill og monter plisse/gardiner", "Bekreft mål etter overtagelse, bestill løsning og monter det som er klart før flytting.", "20.-30. sep.", "Vilde", "Ikke startet"],
+  ["Interiør og innflyttingsklart hjem", "Prioriter seng, spiseplass, belysning, kjøkken, bad og inngang slik at mest mulig er ferdig før flytting.", "22.-30. sep.", "Begge", "Ikke startet"],
+  ["Pakk: dagligvarer og kjøkken", "Pakk det som brukes daglig etter at Ballerud er klargjort. Hold en separat kasse for første døgn.", "24.-28. sep.", "Begge", "Ikke startet"],
   ["Utvask og utflytting", "Tøm bod, vask leiligheten, fotografer tilstand og klargjør nøkler til Silurveien 8A.", "29.-30. sep.", "Begge", "Ikke startet"],
   ["Overtagelse Silurveien 8A", "Sluttkontroll og overlevering av leiligheten.", "1. okt. 12:00", "Begge", "Milepæl"]
 ] as const;
