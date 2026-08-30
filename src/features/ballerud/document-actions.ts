@@ -45,3 +45,27 @@ export async function registerBallerudDocumentAction(input: unknown) {
   revalidatePath("/ballerud/dokumenter");
   return { ok: !error };
 }
+
+export async function deleteBallerudDocumentAction(documentId: string) {
+  const membership = await getCurrentMembership();
+  if (!membership || !z.string().uuid().safeParse(documentId).success) return { ok: false };
+  const supabase = createAdminSupabaseClient();
+  const { data: document } = await supabase
+    .from("ballerud_documents")
+    .select("storage_path")
+    .eq("id", documentId)
+    .eq("household_id", membership.householdId)
+    .maybeSingle();
+  if (!document) return { ok: false };
+
+  const { error: databaseError } = await supabase
+    .from("ballerud_documents")
+    .delete()
+    .eq("id", documentId)
+    .eq("household_id", membership.householdId);
+  if (databaseError) return { ok: false };
+
+  await supabase.storage.from("ballerud-documents").remove([document.storage_path]);
+  revalidatePath("/ballerud/dokumenter");
+  return { ok: true };
+}
